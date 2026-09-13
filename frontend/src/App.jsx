@@ -1037,16 +1037,95 @@ function mockAnalyze(file, seedOverride) {
   };
 }
 
+async function analyzeWithSignalScope(file) {
+  const formData = new FormData();
+  formData.append("image", file);
+
+  const response = await fetch("http://127.0.0.1:8000/predict", {
+    method: "POST",
+    body: formData,
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.detail || "SignalScope analysis failed.");
+  }
+
+  const metadata = data.metadata_evidence || {};
+  const aiProbability = Number(data.ai_generated_probability || 0);
+  const confidence = Math.round(Number(data.confidence || 0) * 100);
+
+  let verdict = "Needs review";
+  if (data.verdict === "likely_ai_generated") {
+    verdict = "Likely AI-generated";
+  } else if (data.verdict === "likely_real") {
+    verdict = "Likely real";
+  } else if (data.verdict === "conflicting_evidence_needs_review") {
+    verdict = "Conflicting evidence — needs review";
+  }
+
+  const evidence = Array.isArray(metadata.evidence)
+    ? metadata.evidence.join(" ")
+    : "";
+
+  const explanation =
+    data.verdict === "conflicting_evidence_needs_review"
+      ? `The visual model conflicts with camera-origin metadata. ${evidence}`
+      : `Visual-model AI likelihood: ${(aiProbability * 100).toFixed(1)}%. ${evidence}`;
+
+  return {
+    id: `${file.name}-${Date.now()}`,
+    name: data.filename || file.name,
+    size: `${(file.size / 1024 / 1024).toFixed(2)} MB`,
+    url: URL.createObjectURL(file),
+
+    verdict,
+    isAI: data.verdict === "likely_ai_generated",
+    confidence,
+    status: "done",
+
+    explanation,
+    heatSpots: [],
+
+    metadata: {
+      camera:
+        [metadata.camera_make, metadata.camera_model]
+          .filter(Boolean)
+          .join(" ") || "Not detected",
+      timestamp: metadata.date_taken || "Not present",
+      editor: "Not evaluated",
+      c2pa: metadata.c2pa_hint_present
+        ? "C2PA hint detected (not cryptographically verified)"
+        : "No C2PA hint detected",
+    },
+
+    robustness: {
+      original: confidence,
+      compressed: null,
+    },
+  };
+}
+
 function ScoreBar({ value, isAI }) {
+  const safeValue = Math.max(0, Math.min(100, Number(value) || 0));
+
   return (
-    <div style={{ height: 8, borderRadius: 5, background: "rgba(148,163,184,.15)", overflow: "hidden" }}>
+    <div
+      style={{
+        height: 8,
+        borderRadius: 5,
+        background: "rgba(148,163,184,.15)",
+        overflow: "hidden",
+      }}
+    >
       <div
         style={{
           height: "100%",
-          width: `${value}%`,
+          width: `${safeValue}%`,
           borderRadius: 5,
-          background: isAI ? "linear-gradient(90deg,#8A5A22,var(--amber))" : "linear-gradient(90deg,#2E7C8F,var(--cyan))",
-          transition: "width .5s ease",
+          background: isAI ? "var(--amber)" : "var(--cyan)",
+          transition: "width .45s ease",
         }}
       />
     </div>
@@ -1296,8 +1375,8 @@ function ReportModal({ item, onClose }) {
 
 function Workspace({ onLogout, theme, onToggleTheme }) {
   const [tab, setTab] = useState("verdict");
-  const [items, setItems] = useState(PRESEEDED_ITEMS); // In-memory session list
-  const [activeId, setActiveId] = useState(PRESEEDED_ITEMS[0].id);
+  const [items, setItems] = useState([]); // In-memory session list
+  const [activeId, setActiveId] = useState(null);
   const [demoLoading, setDemoLoading] = useState(false);
   const [reportItem, setReportItem] = useState(null);
 
@@ -1320,18 +1399,31 @@ function Workspace({ onLogout, theme, onToggleTheme }) {
         status: "pending",
       })),
     ]);
-    seeds.forEach((s, i) => {
-      setTimeout(() => {
-        setItems((prev) => prev.map((p) => (p.id === s.id ? { ...p, status: "analyzing" } : p)));
-      }, 300 + i * 200);
-      setTimeout(() => {
-        const result = mockAnalyze(s.file, Array.from(s.file.name).reduce((a, c) => a + c.charCodeAt(0), 0) + i);
-        setItems((prev) => prev.map((p) => (p.id === s.id ? { ...result, id: s.id, status: "done" } : p)));
+    seeds.forEach(async (s) => {
+      setItems((prev) =>
+        prev.map((p) => (p.id === s.id ? { ...p, status: "analyzing" } : p))
+      );
+
+      try {
+        const result = await analyzeWithSignalScope(s.file);
+        setItems((prev) =>
+          prev.map((p) =>
+            p.id === s.id ? { ...result, id: s.id, status: "done" } : p
+          )
+        );
         setActiveId(s.id);
-      }, 1400 + i * 500);
+      } catch (error) {
+        setItems((prev) =>
+          prev.map((p) =>
+            p.id === s.id
+              ? { ...p, status: "error", error: error.message }
+              : p
+          )
+        );
+      }
     });
-    if (files.length === 1) setTab("verdict");
-    else setTab("batch");
+
+    setTab(files.length === 1 ? "verdict" : "batch");
   };
 
   const loadDemoSample = (index) => {
