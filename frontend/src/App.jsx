@@ -1,818 +1,1498 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import {
-  UploadCloud,
-  Image as ImageIcon,
-  Loader2,
-  CheckCircle2,
-  ChevronDown,
-  ChevronUp,
-  ShieldCheck,
-  ShieldAlert,
-  Layers,
-  SlidersHorizontal,
-  History,
-  ScanEye,
-  Camera,
-  Clock,
-  PenTool,
-  BadgeCheck,
-  MessageSquareText,
-  Grid3x3,
-  RefreshCw,
-} from "lucide-react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 
-/* ---------------------------------------------------------------
-   Mock inference layer — pure front-end, no model wired up yet.
----------------------------------------------------------------- */
-function hashString(str) {
-  let h = 2166136261;
-  for (let i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 16777619);
+/* ============================================================
+   VERASCOPE — Forensic Image-Verification Tool
+   Design tokens:
+   navy-950 #070B14  navy-900 #0B1220  panel #121B30
+   glass    rgba(255,255,255,.05)   line rgba(255,255,255,.09)
+   cyan     #5FD0E8 (real / trust)   amber #F0A63D (AI-gen / warn)
+   ink      #EDEFF5   slate #8891A8
+   Type: Fraunces (display/verdict) + Inter (UI)
+   ============================================================ */
+
+const FONTS = `
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,440;0,9..144,560;1,9..144,440&family=Inter:wght@400;500;600;700&display=swap');
+`;
+
+const GLOBAL_CSS = `
+${FONTS}
+* { box-sizing: border-box; }
+.vs-root {
+  --navy-950: #070B14;
+  --navy-900: #0B1220;
+  --panel: #121B30;
+  --panel-2: #0E1729;
+  --glass: rgba(255,255,255,.05);
+  --glass-strong: rgba(255,255,255,.085);
+  --line: rgba(255,255,255,.09);
+  --line-strong: rgba(255,255,255,.16);
+  --cyan: #5FD0E8;
+  --cyan-dim: #2E7C8F;
+  --amber: #F0A63D;
+  --amber-dim: #8A5A22;
+  --ink: #EDEFF5;
+  --slate: #8891A8;
+  --slate-dim: #5B6478;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--ink);
+  background: var(--navy-900);
+  min-height: 100vh;
+  width: 100%;
+  position: relative;
+}
+.vs-serif {
+  font-family: 'Fraunces', Georgia, serif;
+}
+.vs-root ::selection {
+  background: var(--cyan);
+  color: #04121a;
+}
+.vs-btn {
+  cursor: pointer;
+  border: none;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  transition: transform .15s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease, opacity .15s ease;
+}
+.vs-btn:active {
+  transform: scale(.97);
+}
+.vs-btn:focus-visible, .vs-link:focus-visible, .vs-input:focus-visible, .vs-tab:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+.vs-input {
+  font-family: 'Inter', sans-serif;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vs-root * {
+    animation-duration: .001ms !important;
+    transition-duration: .001ms !important;
   }
-  return Math.abs(h);
+}
+.vs-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.vs-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 8px;
+}
+.vs-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-function mockAnalyze(file) {
-  const seed = hashString(file.name + file.size);
-  const score = 0.12 + (seed % 8800) / 10000;
-  const isAi = score > 0.5;
-  const confidence = isAi ? score : 1 - score;
-
-  const cameras = ["Canon EOS R5", "iPhone 15 Pro", "Sony A7 IV", null];
-  const editors = ["Adobe Photoshop 25.3", "Lightroom Classic", null, null];
-  const camera = cameras[seed % cameras.length];
-  const editor = editors[(seed >> 3) % editors.length];
-  const c2pa = seed % 5 === 0 ? "present" : seed % 5 === 1 ? "invalid" : "absent";
-
-  const blobs = Array.from({ length: 4 }).map((_, i) => {
-    const s = seed + i * 97;
-    return {
-      x: 15 + (s % 70),
-      y: 15 + ((s >> 2) % 70),
-      r: 18 + ((s >> 4) % 22),
-      strength: 0.35 + ((s >> 6) % 60) / 100,
-    };
-  });
-
-  const compressedDelta = (((seed >> 5) % 14) / 100) * (seed % 2 === 0 ? 1 : -1);
-  const compressedScore = Math.min(0.99, Math.max(0.01, score + compressedDelta));
-
-  const explanations = isAi
-    ? [
-        "Texture patterns in the skin and background repeat in ways that are uncommon in camera sensor noise.",
-        "Lighting across the subject doesn't fully agree with the shadows in the scene, a pattern often seen in synthetic images.",
-        "Fine detail around edges — hair, fabric, and reflections — looks slightly smoothed in a way generation models tend to produce.",
-      ]
-    : [
-        "Sensor noise looks consistent across the frame, which is typical of an unaltered photo.",
-        "Lighting and shadow direction agree throughout the scene.",
-        "Fine detail holds up under close inspection, without the smoothing patterns generative tools tend to leave behind.",
-      ];
-
-  return {
-    score,
-    isAi,
-    confidence,
-    label: isAi ? "Likely AI-generated" : "Likely real",
-    camera,
-    editor,
-    c2pa,
-    timestamp: new Date(Date.now() - (seed % 1e10)).toLocaleString(undefined, {
-      year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-    }),
-    blobs,
-    compressedScore,
-    explanation: explanations[seed % explanations.length],
-  };
+@keyframes vs-scan {
+  0% { top: -4%; }
+  100% { top: 104%; }
+}
+@keyframes vs-fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes vs-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes vs-pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(95,208,232,.35); }
+  100% { box-shadow: 0 0 0 14px rgba(95,208,232,0); }
+}
+@keyframes vs-drift {
+  0% { background-position: 0 0; }
+  100% { background-position: 120px 120px; }
+}
+@keyframes vs-spin {
+  to { transform: rotate(360deg); }
 }
 
-/* ---------------------------------------------------------------
-   Small shared atoms
----------------------------------------------------------------- */
-function GlassPanel({ children, className = "", style = {} }) {
-  return <div className={`glass ${className}`} style={style}>{children}</div>;
+.vs-grid-bg {
+  background-image:
+    linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+  background-size: 42px 42px;
 }
+`;
 
-function ConfidenceBar({ value, tone }) {
-  return (
-    <div className="conf-track">
-      <div
-        className="conf-fill"
-        style={{ width: `${Math.round(value * 100)}%`, background: tone === "ai" ? "var(--accent-ai)" : "var(--accent-real)" }}
-      />
-    </div>
-  );
-}
+/* ---------- Sample Forensic Images for Immediate Evaluation ---------- */
 
-function StatusBadge({ status }) {
-  if (status === "pending") return <span className="badge badge-pending">Queued</span>;
-  if (status === "processing") return <span className="badge badge-processing"><Loader2 size={11} className="spin" /> Analyzing</span>;
-  return <span className="badge badge-done"><CheckCircle2 size={11} /> Done</span>;
-}
+const SAMPLE_REAL_SVG = `data:image/svg+xml;utf8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="450" viewBox="0 0 600 450">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#14223d" />
+      <stop offset="100%" stop-color="#243b55" />
+    </linearGradient>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1b2a38" />
+      <stop offset="100%" stop-color="#0c161d" />
+    </linearGradient>
+    <radialGradient id="sensorNoise" cx="50%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#5FD0E8" stop-opacity="0.12" />
+      <stop offset="100%" stop-color="#070B14" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="600" height="450" fill="url(#sky)" />
+  <rect y="280" width="600" height="170" fill="url(#ground)" />
+  <circle cx="300" cy="190" r="110" fill="#2d425b" />
+  <circle cx="300" cy="180" r="75" fill="#3f5a7a" />
+  <circle cx="275" cy="170" r="10" fill="#14223d" />
+  <circle cx="325" cy="170" r="10" fill="#14223d" />
+  <circle cx="277" cy="168" r="3" fill="#ffffff" />
+  <circle cx="327" cy="168" r="3" fill="#ffffff" />
+  <path d="M285 205 Q300 216 315 205" stroke="#14223d" stroke-width="3" fill="none" stroke-linecap="round" />
+  <rect width="600" height="450" fill="url(#sensorNoise)" />
+  <text x="24" y="36" fill="#8891A8" font-family="sans-serif" font-size="13" letter-spacing="1">CANON EOS R6 · 50MM F/1.8 · ISO 400</text>
+</svg>
+`)}`;
 
-function EmptyState({ icon: Icon, text, cta, onCta }) {
-  return (
-    <GlassPanel className="panel" style={{ textAlign: "center", padding: "48px 24px", color: "var(--ink-muted)" }}>
-      <Icon size={22} style={{ marginBottom: 12, opacity: 0.8 }} />
-      <p style={{ margin: "0 0 16px", fontSize: 14 }}>{text}</p>
-      {cta && <button className="ghost-btn" onClick={onCta}>{cta}</button>}
-    </GlassPanel>
-  );
-}
+const SAMPLE_AI_SVG = `data:image/svg+xml;utf8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="450" viewBox="0 0 600 450">
+  <defs>
+    <linearGradient id="synthBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2a1532" />
+      <stop offset="50%" stop-color="#191938" />
+      <stop offset="100%" stop-color="#0e172a" />
+    </linearGradient>
+    <radialGradient id="aiGlow" cx="50%" cy="45%" r="45%">
+      <stop offset="0%" stop-color="#F0A63D" stop-opacity="0.28" />
+      <stop offset="50%" stop-color="#e0553f" stop-opacity="0.14" />
+      <stop offset="100%" stop-color="#070B14" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="600" height="450" fill="url(#synthBg)" />
+  <ellipse cx="300" cy="220" rx="125" ry="140" fill="#2d2948" />
+  <ellipse cx="300" cy="210" rx="90" ry="105" fill="#3c3761" />
+  <ellipse cx="265" cy="195" rx="14" ry="9" fill="#1b1830" />
+  <ellipse cx="335" cy="195" rx="14" ry="9" fill="#1b1830" />
+  <circle cx="267" cy="194" r="3.5" fill="#F0A63D" />
+  <circle cx="337" cy="194" r="3.5" fill="#5FD0E8" />
+  <path d="M280 240 Q300 252 320 240" stroke="#1b1830" stroke-width="3" fill="none" stroke-linecap="round" />
+  <rect width="600" height="450" fill="url(#aiGlow)" />
+  <text x="24" y="36" fill="#F0A63D" font-family="sans-serif" font-size="13" letter-spacing="1">SYNTHETIC DIFFUSION ARTIFACT BENCHMARK</text>
+</svg>
+`)}`;
 
-/* Horizontal strip for picking which analyzed image a page refers to */
-function ImagePicker({ items, selectedId, onSelect }) {
-  const done = items.filter((i) => i.status === "done");
-  if (!done.length) return null;
-  return (
-    <div className="image-picker">
-      {done.map((item) => (
-        <button
-          key={item.id}
-          className={`picker-thumb ${selectedId === item.id ? "picker-active" : ""}`}
-          onClick={() => onSelect(item.id)}
-          title={item.name}
-        >
-          <img src={item.url} alt={item.name} />
-        </button>
-      ))}
-    </div>
-  );
-}
+/* ---------- Initial Mock Items (Pre-seeded for immediate inspection) ---------- */
 
-/* ---------------------------------------------------------------
-   Upload zone
----------------------------------------------------------------- */
-function UploadZone({ onFiles, compact }) {
-  const [dragOver, setDragOver] = useState(false);
-  const [error, setError] = useState("");
-  const inputRef = useRef(null);
+const PRESEEDED_ITEMS = [
+  {
+    id: "preseed-editorial-01",
+    name: "editorial_press_photo.jpg",
+    url: SAMPLE_REAL_SVG,
+    verdict: "Likely real",
+    isAI: false,
+    confidence: 88,
+    status: "done",
+    explanation:
+      "The noise pattern across the image is consistent with a physical camera sensor, and compression artifacts follow the natural, irregular pattern typical of a photograph processed through standard editorial software rather than a generative model. Natural illumination geometry shows consistent shadow falls.",
+    heatSpots: [
+      { x: 38, y: 32, r: 8 },
+      { x: 55, y: 36, r: 7 },
+      { x: 48, y: 58, r: 10 },
+    ],
+    metadata: {
+      camera: "Canon EOS R6, 50mm f/1.8",
+      timestamp: "2026-08-14 17:22:03 UTC",
+      editor: "Adobe Lightroom 13.2",
+      c2pa: "Content credentials present, unverified issuer",
+    },
+    robustness: {
+      original: 88,
+      compressed: 86,
+    },
+  },
+  {
+    id: "preseed-synthetic-02",
+    name: "portrait_diffusion_sample.png",
+    url: SAMPLE_AI_SVG,
+    verdict: "Likely AI-generated",
+    isAI: true,
+    confidence: 84,
+    status: "done",
+    explanation:
+      "The image exhibits smooth micro-texture transitions around facial contours and subtle repetition anomalies in high-frequency background noise. Eye reflection vectors diverge slightly from the primary scene illuminant, patterns frequently observed in synthetic generative outputs.",
+    heatSpots: [
+      { x: 44, y: 32, r: 10 },
+      { x: 56, y: 34, r: 9 },
+      { x: 50, y: 54, r: 12 },
+    ],
+    metadata: {
+      camera: "Not detected",
+      timestamp: "Not present",
+      editor: "Not present",
+      c2pa: "No content credentials found",
+    },
+    robustness: {
+      original: 84,
+      compressed: 79,
+    },
+  },
+];
 
-  const validate = (files) => {
-    const accepted = [];
-    let rejected = 0;
-    Array.from(files).forEach((f) => {
-      if (["image/jpeg", "image/png", "image/jpg"].includes(f.type)) accepted.push(f);
-      else rejected++;
-    });
-    if (rejected > 0) {
-      setError(`${rejected} file${rejected > 1 ? "s" : ""} skipped — only JPG and PNG are supported.`);
-      setTimeout(() => setError(""), 4000);
-    }
-    if (accepted.length) onFiles(accepted);
-  };
+/* ---------- Tiny UI Atoms ---------- */
 
+function GlassPanel({ children, style = {}, className = "" }) {
   return (
     <div
-      className={`upload-zone ${dragOver ? "drag" : ""} ${compact ? "compact" : ""}`}
-      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-      onDragLeave={() => setDragOver(false)}
-      onDrop={(e) => { e.preventDefault(); setDragOver(false); validate(e.dataTransfer.files); }}
-      onClick={() => inputRef.current?.click()}
+      className={className}
+      style={{
+        background: "var(--glass)",
+        border: "1px solid var(--line)",
+        backdropFilter: "blur(18px)",
+        WebkitBackdropFilter: "blur(18px)",
+        borderRadius: 14,
+        ...style,
+      }}
     >
-      <input ref={inputRef} type="file" accept="image/png, image/jpeg" multiple hidden
-        onChange={(e) => { validate(e.target.files); e.target.value = ""; }} />
-      <div className="upload-inner">
-        <UploadCloud size={compact ? 20 : 30} strokeWidth={1.5} />
-        <div>
-          <p className="upload-title">{compact ? "Add more images" : "Drop images to examine"}</p>
-          {!compact && <p className="upload-sub">or click to browse — JPG or PNG, one or many at once</p>}
-        </div>
-      </div>
-      {error && <div className="upload-error">{error}</div>}
+      {children}
     </div>
   );
 }
 
-/* =================================================================
-   PAGE 1 — Upload
-================================================================= */
-function UploadPage({ onFiles, items }) {
+function PrimaryButton({ children, onClick, style = {}, type = "button", disabled }) {
   return (
-    <div className="page">
-      <PageHeading title="Upload" sub="Bring in the image you want examined. JPG and PNG only — anything else is rejected before it reaches analysis." />
-      <UploadZone onFiles={onFiles} />
-      {items.length > 0 && (
-        <p className="page-footnote">{items.length} image{items.length > 1 ? "s" : ""} added this session — check the Batch tab to see where each one stands.</p>
-      )}
-    </div>
+    <button
+      type={type}
+      className="vs-btn"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        background: "linear-gradient(180deg,#6EDCF2,#42B7CE)",
+        color: "#04121a",
+        padding: "13px 22px",
+        borderRadius: 9,
+        fontSize: 15,
+        letterSpacing: ".01em",
+        boxShadow: "0 1px 0 rgba(255,255,255,.35) inset, 0 8px 20px -10px rgba(95,208,232,.55)",
+        opacity: disabled ? 0.55 : 1,
+        cursor: disabled ? "not-allowed" : "pointer",
+        ...style,
+      }}
+    >
+      {children}
+    </button>
   );
 }
 
-/* =================================================================
-   PAGE 2 — Batch upload view
-================================================================= */
-function BatchPage({ items, onFiles, selectedId, onSelect, goToVerdict }) {
+function GhostButton({ children, onClick, style = {} }) {
   return (
-    <div className="page">
-      <PageHeading title="Batch" sub="Every image added this session, with where it stands in the pipeline." />
-      <UploadZone onFiles={onFiles} compact />
-      {items.length === 0 ? (
-        <EmptyState icon={Grid3x3} text="Nothing uploaded yet — add images from the Upload tab." />
-      ) : (
-        <div className="batch-grid">
-          {items.map((item) => (
-            <button
-              key={item.id}
-              className={`thumb ${selectedId === item.id ? "thumb-active" : ""}`}
-              onClick={() => { onSelect(item.id); if (item.status === "done") goToVerdict(); }}
-            >
-              <img src={item.url} alt={item.name} />
-              <div className="thumb-overlay"><StatusBadge status={item.status} /></div>
-              {item.status === "done" && (
-                <div className={`thumb-tag ${item.result.isAi ? "tag-ai" : "tag-real"}`}>
-                  {item.result.isAi ? "AI" : "Real"} · {Math.round(item.result.confidence * 100)}%
-                </div>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <button
+      className="vs-btn"
+      onClick={onClick}
+      style={{
+        background: "transparent",
+        color: "var(--ink)",
+        border: "1px solid var(--line-strong)",
+        padding: "12px 20px",
+        borderRadius: 9,
+        fontSize: 15,
+        ...style,
+      }}
+    >
+      {children}
+    </button>
   );
 }
 
-/* =================================================================
-   PAGE 3 — Verdict display
-================================================================= */
-function VerdictPage({ items, selectedId, onSelect }) {
-  const item = items.find((i) => i.id === selectedId && i.status === "done");
-  const [revealed, setRevealed] = useState(false);
-  useEffect(() => { setRevealed(false); const t = setTimeout(() => setRevealed(true), 40); return () => clearTimeout(t); }, [selectedId]);
-
+function Field({ label, type = "text", value, onChange, placeholder, hint }) {
   return (
-    <div className="page">
-      <PageHeading title="Verdict" sub="The headline read on an image — always hedged, never absolute." />
-      <ImagePicker items={items} selectedId={selectedId} onSelect={onSelect} />
-      {!item ? (
-        <EmptyState icon={ShieldCheck} text="Pick a finished image above, or upload one first." />
-      ) : (
-        <GlassPanel className={`verdict-card ${revealed ? "reveal" : ""} ${item.result.isAi ? "tone-ai" : "tone-real"}`}>
-          <div className="verdict-top">
-            <div className="verdict-icon">{item.result.isAi ? <ShieldAlert size={22} /> : <ShieldCheck size={22} />}</div>
-            <div>
-              <p className="verdict-label">{item.result.label}</p>
-              <p className="verdict-sub">Confidence {Math.round(item.result.confidence * 100)}%</p>
-            </div>
-          </div>
-          <ConfidenceBar value={item.result.confidence} tone={item.result.isAi ? "ai" : "real"} />
-        </GlassPanel>
-      )}
-    </div>
+    <label style={{ display: "block", marginBottom: 18 }}>
+      <span style={{ display: "block", fontSize: 13, color: "var(--slate)", marginBottom: 7, fontWeight: 500 }}>
+        {label}
+      </span>
+      <input
+        className="vs-input"
+        type={type}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        style={{
+          width: "100%",
+          background: "rgba(255,255,255,.03)",
+          border: "1px solid var(--line-strong)",
+          borderRadius: 8,
+          padding: "12px 14px",
+          color: "var(--ink)",
+          fontSize: 15,
+          outline: "none",
+        }}
+      />
+      {hint && <span style={{ display: "block", fontSize: 12, color: "var(--slate-dim)", marginTop: 6 }}>{hint}</span>}
+    </label>
   );
 }
 
-/* =================================================================
-   PAGE 4 — Heat-map display
-================================================================= */
-function HeatmapPage({ items, selectedId, onSelect }) {
-  const item = items.find((i) => i.id === selectedId && i.status === "done");
-  const [mode, setMode] = useState("overlay");
-  const [intensity, setIntensity] = useState(0.7);
-
+function MarkIcon({ size = 26 }) {
   return (
-    <div className="page">
-      <PageHeading title="Attention map" sub="Where the model's attention concentrated most when forming its verdict." />
-      <ImagePicker items={items} selectedId={selectedId} onSelect={onSelect} />
-      {!item ? (
-        <EmptyState icon={Layers} text="Pick a finished image above, or upload one first." />
-      ) : (
-        <GlassPanel className="panel">
-          <div className="panel-head">
-            <div className="panel-head-title"><Layers size={15} /> {item.name}</div>
-            <div className="seg">
-              <button className={mode === "overlay" ? "seg-active" : ""} onClick={() => setMode("overlay")}>Overlay</button>
-              <button className={mode === "side" ? "seg-active" : ""} onClick={() => setMode("side")}>Side by side</button>
-            </div>
-          </div>
-          {mode === "overlay" ? (
-            <div className="heatmap-frame">
-              <img src={item.url} alt="" />
-              <div className="heatmap-layer" style={{ backgroundImage: gradientLayers(item.result.blobs, intensity) }} />
-            </div>
-          ) : (
-            <div className="heatmap-side">
-              <div className="heatmap-frame small"><img src={item.url} alt="original" /><span className="frame-label">Original</span></div>
-              <div className="heatmap-frame small">
-                <img src={item.url} alt="heatmap" />
-                <div className="heatmap-layer" style={{ backgroundImage: gradientLayers(item.result.blobs, intensity) }} />
-                <span className="frame-label">Regions flagged</span>
-              </div>
-            </div>
-          )}
-          <div className="slider-row">
-            <SlidersHorizontal size={13} />
-            <input type="range" min="0.2" max="1" step="0.05" value={intensity} onChange={(e) => setIntensity(parseFloat(e.target.value))} />
-            <span className="slider-label">Highlight strength</span>
-          </div>
-          <p className="panel-note">Brighter regions drew the most attention — not necessarily proof of manipulation on their own.</p>
-        </GlassPanel>
-      )}
-    </div>
-  );
-}
-function gradientLayers(blobs, intensity) {
-  return blobs.map((b) => `radial-gradient(circle at ${b.x}% ${b.y}%, rgba(244,63,94,${b.strength * intensity}) 0%, rgba(139,92,246,${b.strength * intensity * 0.5}) ${b.r * 0.7}%, rgba(16,185,129,0) ${b.r}%)`).join(", ");
-}
-
-/* =================================================================
-   PAGE 5 — Explanation text box
-================================================================= */
-function ExplanationPage({ items, selectedId, onSelect }) {
-  const item = items.find((i) => i.id === selectedId && i.status === "done");
-  return (
-    <div className="page">
-      <PageHeading title="Explanation" sub="A plain-language reason behind the verdict — written for someone without a technical background." />
-      <ImagePicker items={items} selectedId={selectedId} onSelect={onSelect} />
-      {!item ? (
-        <EmptyState icon={MessageSquareText} text="Pick a finished image above, or upload one first." />
-      ) : (
-        <GlassPanel className="panel">
-          <div className="panel-head-title" style={{ marginBottom: 12 }}><MessageSquareText size={15} /> Why this verdict</div>
-          <p className="verdict-explanation" style={{ margin: 0 }}>{item.result.explanation}</p>
-        </GlassPanel>
-      )}
-    </div>
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      <circle cx="16" cy="16" r="14" stroke="#5FD0E8" strokeWidth="1.6" opacity=".85" />
+      <circle cx="16" cy="16" r="5.5" fill="#5FD0E8" opacity=".9" />
+      <path d="M16 2 L16 8 M16 24 L16 30 M2 16 L8 16 M24 16 L30 16" stroke="#F0A63D" strokeWidth="1.4" opacity=".8" />
+    </svg>
   );
 }
 
-/* =================================================================
-   PAGE 6 — Metadata / provenance
-================================================================= */
-function MetadataPage({ items, selectedId, onSelect }) {
-  const item = items.find((i) => i.id === selectedId && i.status === "done");
-  const [open, setOpen] = useState(true);
-  const r = item?.result;
-  const c2paLabel = r && {
-    present: { text: "Content credentials verified", icon: BadgeCheck, tone: "real" },
-    invalid: { text: "Content credentials found but invalid", icon: ShieldAlert, tone: "ai" },
-    absent: { text: "No content credentials found", icon: ShieldAlert, tone: "muted" },
-  }[r.c2pa];
+/* ---------- Animated Scan Demo (Hero) ---------- */
 
+function ScanDemo() {
+  const [phase, setPhase] = useState("scanning"); // scanning -> revealed
+  useEffect(() => {
+    const t = setTimeout(() => setPhase("revealed"), 2600);
+    return () => clearTimeout(t);
+  }, []);
   return (
-    <div className="page">
-      <PageHeading title="Metadata & provenance" sub="What the file itself says about where it came from — one signal among several." />
-      <ImagePicker items={items} selectedId={selectedId} onSelect={onSelect} />
-      {!item ? (
-        <EmptyState icon={ScanEye} text="Pick a finished image above, or upload one first." />
-      ) : (
-        <GlassPanel className="panel">
-          <button className="panel-head collapsible" onClick={() => setOpen(!open)}>
-            <div className="panel-head-title"><ScanEye size={15} /> {item.name}</div>
-            {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </button>
-          {open && (
-            <div className="meta-body">
-              <div className="meta-row"><Camera size={14} /><span className="meta-label">Camera</span><span className="meta-value">{r.camera || "Not present in file"}</span></div>
-              <div className="meta-row"><Clock size={14} /><span className="meta-label">Captured</span><span className="meta-value">{r.timestamp}</span></div>
-              <div className="meta-row"><PenTool size={14} /><span className="meta-label">Editing software</span><span className="meta-value">{r.editor || "None detected"}</span></div>
-              <div className={`meta-c2pa tone-${c2paLabel.tone}`}><c2paLabel.icon size={14} />{c2paLabel.text}</div>
-              <p className="panel-note">Metadata can be stripped or edited, so treat this as one signal among several, not a verdict on its own.</p>
-            </div>
-          )}
-        </GlassPanel>
-      )}
-    </div>
-  );
-}
-
-/* =================================================================
-   PAGE 7 — Robustness comparison
-================================================================= */
-function RobustnessPage({ items, selectedId, onSelect }) {
-  const item = items.find((i) => i.id === selectedId && i.status === "done");
-  const [showCompressed, setShowCompressed] = useState(false);
-
-  return (
-    <div className="page">
-      <PageHeading title="Stability under compression" sub="Whether the verdict holds up after the image is re-compressed or resized — a quick check against fragile signals." />
-      <ImagePicker items={items} selectedId={selectedId} onSelect={onSelect} />
-      {!item ? (
-        <EmptyState icon={RefreshCw} text="Pick a finished image above, or upload one first." />
-      ) : (
-        <GlassPanel className="panel">
-          <div className="panel-head">
-            <div className="panel-head-title"><RefreshCw size={15} /> {item.name}</div>
-            <div className="seg">
-              <button className={!showCompressed ? "seg-active" : ""} onClick={() => setShowCompressed(false)}>Original</button>
-              <button className={showCompressed ? "seg-active" : ""} onClick={() => setShowCompressed(true)}>Compressed</button>
-            </div>
-          </div>
-          <div className="robust-frame">
-            <img src={item.url} alt="" style={showCompressed ? { filter: "contrast(0.88) saturate(0.8) blur(0.4px)" } : {}} />
-          </div>
-          <div className="robust-scores">
-            <div>
-              <span className="meta-label">Original confidence</span>
-              <ConfidenceBar value={item.result.confidence} tone={item.result.isAi ? "ai" : "real"} />
-              <span className="score-num">{Math.round(item.result.confidence * 100)}%</span>
-            </div>
-            <div>
-              <span className="meta-label">After re-compression</span>
-              <ConfidenceBar value={item.result.compressedScore > 0.5 ? item.result.compressedScore : 1 - item.result.compressedScore} tone={item.result.compressedScore > 0.5 ? "ai" : "real"} />
-              <span className="score-num">{Math.round((item.result.compressedScore > 0.5 ? item.result.compressedScore : 1 - item.result.compressedScore) * 100)}%</span>
-            </div>
-          </div>
-          <p className="panel-note">
-            {Math.abs(item.result.compressedScore - item.result.score) < 0.08
-              ? "The verdict held steady after compression, which suggests the signal isn't a fragile artifact."
-              : "The verdict shifted noticeably after compression — worth treating this result with extra caution."}
-          </p>
-        </GlassPanel>
-      )}
-    </div>
-  );
-}
-
-/* =================================================================
-   PAGE 8 — Result history / session view
-================================================================= */
-function HistoryPage({ items, selectedId, onSelect, goToVerdict }) {
-  const done = items.filter((i) => i.status === "done");
-  return (
-    <div className="page">
-      <PageHeading title="Session history" sub="Every image checked so far in this session." />
-      {done.length === 0 ? (
-        <EmptyState icon={History} text="Nothing finished yet — analyzed images will show up here." />
-      ) : (
-        <div className="history-list wide">
-          {done.map((item) => (
-            <button key={item.id} className={`history-item wide ${selectedId === item.id ? "history-active" : ""}`}
-              onClick={() => { onSelect(item.id); goToVerdict(); }}>
-              <img src={item.url} alt="" />
-              <div className="history-meta">
-                <span className="history-name">{item.name}</span>
-                <span className={`history-verdict ${item.result.isAi ? "tag-ai" : "tag-real"}`}>
-                  {item.result.isAi ? "Likely AI" : "Likely real"} · {Math.round(item.result.confidence * 100)}%
-                </span>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* =================================================================
-   PAGE 9 — Loading / processing state (standalone demo)
-================================================================= */
-function LoadingPage({ items }) {
-  const inFlight = items.filter((i) => i.status !== "done");
-  const [demoStep, setDemoStep] = useState(null); // null | 'queued' | 'processing' | 'done'
-
-  const runDemo = () => {
-    setDemoStep("queued");
-    setTimeout(() => setDemoStep("processing"), 700);
-    setTimeout(() => setDemoStep("done"), 2600);
-  };
-
-  return (
-    <div className="page">
-      <PageHeading title="Loading state" sub="What someone sees while predict() is running — a short simulated delay so the real thing won't feel abrupt." />
-
-      {inFlight.length > 0 && (
-        <>
-          <p className="page-footnote" style={{ marginBottom: 12 }}>Currently in the pipeline:</p>
-          <div className="batch-grid" style={{ marginBottom: 24 }}>
-            {inFlight.map((item) => (
-              <div key={item.id} className="thumb" style={{ cursor: "default" }}>
-                <img src={item.url} alt={item.name} />
-                <div className="thumb-overlay"><StatusBadge status={item.status} /></div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      <GlassPanel className="panel">
-        <div className="panel-head-title" style={{ marginBottom: 16 }}><Loader2 size={15} /> Try the loading sequence</div>
-        {!demoStep && <button className="ghost-btn" onClick={runDemo}>Simulate processing</button>}
-        {demoStep && (
-          <div className="demo-loading">
-            <div className={`demo-row ${demoStep === "queued" ? "demo-active" : ""}`}><StatusBadge status="pending" /><span>Waiting in the queue</span></div>
-            <div className={`demo-row ${demoStep === "processing" ? "demo-active" : ""}`}><StatusBadge status="processing" /><span>Checking pixel patterns, metadata, and provenance</span></div>
-            <div className={`demo-row ${demoStep === "done" ? "demo-active" : ""}`}><StatusBadge status="done" /><span>Ready to view</span></div>
-            {demoStep === "done" && <button className="ghost-btn" style={{ marginTop: 14 }} onClick={runDemo}>Run again</button>}
-          </div>
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        aspectRatio: "4/3",
+        borderRadius: 16,
+        overflow: "hidden",
+        border: "1px solid var(--line-strong)",
+        background: "linear-gradient(135deg,#1a2740 0%,#0d1524 60%)",
+      }}
+    >
+      {/* portrait-ish placeholder art */}
+      <svg viewBox="0 0 400 300" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
+        <defs>
+          <radialGradient id="face" cx="50%" cy="42%" r="55%">
+            <stop offset="0%" stopColor="#3a4d6e" />
+            <stop offset="100%" stopColor="#141d30" />
+          </radialGradient>
+          <linearGradient id="heat" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#F0A63D" stopOpacity="0.85" />
+            <stop offset="45%" stopColor="#e0553f" stopOpacity="0.55" />
+            <stop offset="100%" stopColor="#5FD0E8" stopOpacity="0.15" />
+          </linearGradient>
+        </defs>
+        <rect width="400" height="300" fill="#0d1524" />
+        <ellipse cx="200" cy="150" rx="120" ry="130" fill="url(#face)" opacity="0.9" />
+        <ellipse cx="160" cy="130" rx="14" ry="9" fill="#0d1524" opacity=".55" />
+        <ellipse cx="240" cy="130" rx="14" ry="9" fill="#0d1524" opacity=".55" />
+        <path d="M175 190 Q200 205 225 190" stroke="#0d1524" strokeWidth="4" fill="none" opacity=".5" strokeLinecap="round" />
+        {phase === "revealed" && (
+          <g style={{ animation: "vs-fade .6s ease" }}>
+            <ellipse cx="150" cy="120" rx="34" ry="26" fill="url(#heat)" />
+            <ellipse cx="250" cy="128" rx="30" ry="22" fill="url(#heat)" />
+            <ellipse cx="200" cy="195" rx="46" ry="18" fill="url(#heat)" opacity="0.6" />
+          </g>
         )}
+      </svg>
+
+      {phase === "scanning" && (
+        <div
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            height: 2,
+            background: "linear-gradient(90deg, transparent, #5FD0E8, transparent)",
+            boxShadow: "0 0 18px 3px rgba(95,208,232,.7)",
+            animation: "vs-scan 2.5s cubic-bezier(.65,0,.35,1) 1",
+          }}
+        />
+      )}
+
+      <div
+        style={{
+          position: "absolute",
+          left: 14,
+          top: 14,
+          fontSize: 12,
+          fontWeight: 600,
+          padding: "5px 10px",
+          borderRadius: 6,
+          background: "rgba(7,11,20,.65)",
+          border: "1px solid var(--line-strong)",
+          color: phase === "revealed" ? "var(--amber)" : "var(--slate)",
+          transition: "color .4s ease",
+        }}
+      >
+        {phase === "revealed" ? "Likely AI-generated · 82%" : "Analyzing…"}
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   PAGE 1: LANDING ( / )
+   ============================================================ */
+
+function Landing({ goto }) {
+  const steps = [
+    { n: "01", t: "Upload an image", d: "Drop in a single photo, or a batch — JPG or PNG formats supported." },
+    { n: "02", t: "See the reasoning", d: "A heat-map and a plain-language explanation, not just an unexplained score." },
+    { n: "03", t: "Read the verdict, hedged", d: "Likely AI-generated or likely real, with a confidence percentage — never an absolute claim." },
+  ];
+
+  return (
+    <div className="vs-scrollbar" style={{ maxWidth: 1160, margin: "0 auto", padding: "0 28px" }}>
+      {/* nav */}
+      <nav style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "26px 0" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <MarkIcon />
+          <span className="vs-serif" style={{ fontSize: 20, fontWeight: 560, letterSpacing: ".01em" }}>Verascope</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 28 }}>
+          <a className="vs-link" href="#how" style={{ color: "var(--slate)", textDecoration: "none", fontSize: 14 }}>How it works</a>
+          <a className="vs-link" href="#trust" style={{ color: "var(--slate)", textDecoration: "none", fontSize: 14 }}>Why trust it</a>
+          <GhostButton onClick={() => goto("login")} style={{ padding: "9px 16px", fontSize: 14 }}>Log in</GhostButton>
+          <PrimaryButton onClick={() => goto("signup")} style={{ padding: "9px 18px", fontSize: 14 }}>Get started</PrimaryButton>
+        </div>
+      </nav>
+
+      {/* hero */}
+      <section style={{ display: "grid", gridTemplateColumns: "1.05fr 1fr", gap: 56, alignItems: "center", padding: "56px 0 88px" }}>
+        <div style={{ animation: "vs-fade-up .7s ease both" }}>
+          <h1 className="vs-serif" style={{ fontSize: 52, lineHeight: 1.08, fontWeight: 480, margin: "0 0 22px", letterSpacing: "-.01em" }}>
+            Know what you're looking at, before you share it.
+          </h1>
+          <p style={{ fontSize: 17, lineHeight: 1.6, color: "var(--slate)", maxWidth: 480, margin: "0 0 32px" }}>
+            Verascope reads an image the way a forensic examiner would — pixel artifacts, compression history, metadata — and hands you a hedged, explainable verdict instead of a bare yes or no.
+          </p>
+          <div style={{ display: "flex", gap: 14 }}>
+            <PrimaryButton onClick={() => goto("signup")}>Try it on an image</PrimaryButton>
+            <GhostButton onClick={() => goto("login")}>I have an account</GhostButton>
+          </div>
+          <p style={{ fontSize: 13, color: "var(--slate-dim)", marginTop: 18 }}>
+            Built for journalists and newsroom fact-checkers. No image leaves your session.
+          </p>
+        </div>
+        <div style={{ animation: "vs-fade-up .8s ease .1s both" }}>
+          <ScanDemo />
+        </div>
+      </section>
+
+      {/* how it works */}
+      <section id="how" style={{ padding: "40px 0 80px", borderTop: "1px solid var(--line)" }}>
+        <h2 className="vs-serif" style={{ fontSize: 28, fontWeight: 500, margin: "48px 0 34px" }}>Three steps, no jargon</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 22 }}>
+          {steps.map((s) => (
+            <GlassPanel key={s.n} style={{ padding: 26 }}>
+              <div className="vs-serif" style={{ color: "var(--cyan)", fontSize: 15, marginBottom: 14 }}>{s.n}</div>
+              <div style={{ fontSize: 17, fontWeight: 600, marginBottom: 8 }}>{s.t}</div>
+              <div style={{ fontSize: 14.5, color: "var(--slate)", lineHeight: 1.55 }}>{s.d}</div>
+            </GlassPanel>
+          ))}
+        </div>
+      </section>
+
+      {/* trust strip */}
+      <section id="trust" style={{ padding: "10px 0 90px" }}>
+        <GlassPanel style={{ padding: "36px 40px", display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 40, alignItems: "center" }}>
+          <div>
+            <h3 className="vs-serif" style={{ fontSize: 24, fontWeight: 500, margin: "0 0 12px" }}>Confidence, not certainty</h3>
+            <p style={{ color: "var(--slate)", fontSize: 15, lineHeight: 1.6, margin: 0, maxWidth: 460 }}>
+              Every result ships with a confidence percentage, a heat-map you can inspect yourself, and a note on how the score held up under compression. Nothing here is presented as fact — that's the point.
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: 28, justifyContent: "flex-end" }}>
+            <Stat label="Hedged verdicts" value="100%" />
+            <Stat label="Panels per image" value="6" />
+            <Stat label="Stored after session" value="0" />
+          </div>
+        </GlassPanel>
+      </section>
+
+      <footer style={{ borderTop: "1px solid var(--line)", padding: "26px 0 50px", display: "flex", justifyContent: "space-between", color: "var(--slate-dim)", fontSize: 13 }}>
+        <span>Verascope — image provenance workspace</span>
+        <span>Hackathon build · not a production forensic tool</span>
+      </footer>
+    </div>
+  );
+}
+
+function Stat({ label, value }) {
+  return (
+    <div style={{ textAlign: "right" }}>
+      <div className="vs-serif" style={{ fontSize: 30, color: "var(--cyan)" }}>{value}</div>
+      <div style={{ fontSize: 12.5, color: "var(--slate)", marginTop: 4 }}>{label}</div>
+    </div>
+  );
+}
+
+/* ============================================================
+   AUTH SHELL (PAGE 2: LOGIN & PAGE 3: SIGNUP)
+   ============================================================ */
+
+function AuthShell({ title, subtitle, children, footer }) {
+  return (
+    <div
+      className="vs-grid-bg"
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        position: "relative",
+        overflow: "hidden",
+        animation: "vs-drift 6s linear infinite",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          width: 520,
+          height: 520,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(95,208,232,.12), transparent 70%)",
+          top: "-10%",
+          left: "-8%",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          width: 460,
+          height: 460,
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(240,166,61,.09), transparent 70%)",
+          bottom: "-12%",
+          right: "-6%",
+        }}
+      />
+      <GlassPanel
+        style={{
+          width: 400,
+          padding: "38px 34px",
+          position: "relative",
+          zIndex: 1,
+          animation: "vs-fade-up .5s ease both",
+          boxShadow: "0 30px 60px -20px rgba(0,0,0,.5)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 26 }}>
+          <MarkIcon size={22} />
+          <span className="vs-serif" style={{ fontSize: 17 }}>Verascope</span>
+        </div>
+        <h1 className="vs-serif" style={{ fontSize: 26, fontWeight: 500, margin: "0 0 6px" }}>{title}</h1>
+        <p style={{ fontSize: 14, color: "var(--slate)", margin: "0 0 26px" }}>{subtitle}</p>
+        {children}
+        {footer}
       </GlassPanel>
     </div>
   );
 }
 
-/* ---------------------------------------------------------------
-   Shared page heading
----------------------------------------------------------------- */
-function PageHeading({ title, sub }) {
+function Login({ goto, onAuthed }) {
+  const [email, setEmail] = useState("");
+  const [pw, setPw] = useState("");
   return (
-    <div className="page-heading">
-      <h2>{title}</h2>
-      <p>{sub}</p>
+    <AuthShell
+      title="Welcome back"
+      subtitle="Log in to keep checking images."
+      footer={
+        <p style={{ fontSize: 13.5, color: "var(--slate)", marginTop: 22, textAlign: "center" }}>
+          No account?{" "}
+          <span onClick={() => goto("signup")} style={{ color: "var(--cyan)", cursor: "pointer", fontWeight: 600 }}>
+            Sign up
+          </span>
+        </p>
+      }
+    >
+      <form onSubmit={(e) => { e.preventDefault(); onAuthed(); }}>
+        <Field label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@newsroom.com" />
+        <Field label="Password" type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="••••••••" />
+        <PrimaryButton type="submit" style={{ width: "100%", marginTop: 4 }}>Log in</PrimaryButton>
+      </form>
+      <div style={{ textAlign: "center", marginTop: 16 }}>
+        <span onClick={() => goto("landing")} style={{ color: "var(--slate-dim)", fontSize: 13, cursor: "pointer" }}>← Back to home</span>
+      </div>
+    </AuthShell>
+  );
+}
+
+function Signup({ goto, onAuthed }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [pw, setPw] = useState("");
+  return (
+    <AuthShell
+      title="Create your account"
+      subtitle="Start verifying images in under a minute."
+      footer={
+        <p style={{ fontSize: 13.5, color: "var(--slate)", marginTop: 22, textAlign: "center" }}>
+          Already have one?{" "}
+          <span onClick={() => goto("login")} style={{ color: "var(--cyan)", cursor: "pointer", fontWeight: 600 }}>
+            Log in
+          </span>
+        </p>
+      }
+    >
+      <form onSubmit={(e) => { e.preventDefault(); onAuthed(); }}>
+        <Field label="Name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jordan Ellis" />
+        <Field label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@newsroom.com" />
+        <Field label="Password" type="password" value={pw} onChange={(e) => setPw(e.target.value)} hint="At least 8 characters." placeholder="••••••••" />
+        <PrimaryButton type="submit" style={{ width: "100%", marginTop: 4 }}>Create account</PrimaryButton>
+      </form>
+      <div style={{ textAlign: "center", marginTop: 16 }}>
+        <span onClick={() => goto("landing")} style={{ color: "var(--slate-dim)", fontSize: 13, cursor: "pointer" }}>← Back to home</span>
+      </div>
+    </AuthShell>
+  );
+}
+
+/* ============================================================
+   PAGE 4: WORKSPACE (The 9-Page Analyzer, Behind Auth)
+   Tabs:
+   1. Upload
+   2. Batch
+   3. Verdict
+   4. Attention map
+   5. Explanation
+   6. Metadata
+   7. Robustness
+   8. History
+   9. Loading state
+   ============================================================ */
+
+const TABS = [
+  { id: "upload", label: "Upload" },
+  { id: "batch", label: "Batch" },
+  { id: "verdict", label: "Verdict" },
+  { id: "heatmap", label: "Attention map" },
+  { id: "explanation", label: "Explanation" },
+  { id: "metadata", label: "Metadata" },
+  { id: "robustness", label: "Robustness" },
+  { id: "history", label: "History" },
+  { id: "loading", label: "Loading state" },
+];
+
+function mockAnalyze(file, seedOverride) {
+  const seed = seedOverride ?? Array.from(file.name).reduce((a, c) => a + c.charCodeAt(0), 0);
+  const rand = (min, max) => min + (((seed * 9301 + 49297) % 233280) / 233280) * (max - min);
+  const isAI = seed % 2 === 0;
+  const confidence = Math.round(isAI ? rand(68, 92) : rand(64, 91));
+  return {
+    id: `${file.name}-${seed}-${Date.now()}`,
+    name: file.name,
+    url: URL.createObjectURL(file),
+    verdict: isAI ? "Likely AI-generated" : "Likely real",
+    isAI,
+    confidence,
+    explanation: isAI
+      ? "The image shows unusually smooth texture transitions around facial contours and subtle repeating frequency patterns in the background. Taken together, these characteristics are typical of generative synthesis models rather than physical camera sensors."
+      : "The noise distribution across the image aligns with optical sensor noise, and compression boundaries show the irregular distribution typical of a camera photograph exported via standard editors. No evident signs of generative synthesis.",
+    heatSpots: [
+      { x: 32 + rand(0, 15), y: 30 + rand(0, 15), r: 9 },
+      { x: 60 + rand(0, 10), y: 35 + rand(0, 10), r: 8 },
+      { x: 46 + rand(0, 10), y: 64 + rand(0, 10), r: 11 },
+    ],
+    metadata: {
+      camera: isAI ? "Not detected" : "Canon EOS R6, 50mm f/1.8",
+      timestamp: isAI ? "Not present" : "2026-08-14 17:22:03 UTC",
+      editor: isAI ? "Not present" : "Adobe Lightroom 13.2",
+      c2pa: isAI ? "No content credentials found" : "Content credentials present, unverified issuer",
+    },
+    robustness: {
+      original: confidence,
+      compressed: Math.max(0, Math.min(100, confidence + Math.round(rand(-7, 5)))),
+    },
+  };
+}
+
+function ScoreBar({ value, isAI }) {
+  return (
+    <div style={{ height: 8, borderRadius: 5, background: "rgba(255,255,255,.06)", overflow: "hidden" }}>
+      <div
+        style={{
+          height: "100%",
+          width: `${value}%`,
+          borderRadius: 5,
+          background: isAI ? "linear-gradient(90deg,#8A5A22,#F0A63D)" : "linear-gradient(90deg,#2E7C8F,#5FD0E8)",
+          transition: "width .5s ease",
+        }}
+      />
     </div>
   );
 }
 
-/* ---------------------------------------------------------------
-   Root app — tab navigation across all pages
----------------------------------------------------------------- */
-const TABS = [
-  { id: "upload", label: "Upload", icon: UploadCloud },
-  { id: "batch", label: "Batch", icon: Grid3x3 },
-  { id: "verdict", label: "Verdict", icon: ShieldCheck },
-  { id: "heatmap", label: "Attention map", icon: Layers },
-  { id: "explanation", label: "Explanation", icon: MessageSquareText },
-  { id: "metadata", label: "Metadata", icon: ScanEye },
-  { id: "robustness", label: "Robustness", icon: RefreshCw },
-  { id: "history", label: "History", icon: History },
-  { id: "loading", label: "Loading state", icon: Loader2 },
-];
+function StatusPill({ status }) {
+  const map = {
+    pending: { c: "var(--slate)", t: "Pending" },
+    analyzing: { c: "var(--cyan)", t: "Analyzing" },
+    done: { c: "var(--amber)", t: "Done" },
+  };
+  const s = map[status] || map.pending;
+  return (
+    <span
+      style={{
+        fontSize: 11.5,
+        fontWeight: 600,
+        color: s.c,
+        border: `1px solid ${s.c}55`,
+        padding: "3px 9px",
+        borderRadius: 20,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+      }}
+    >
+      {status === "analyzing" && (
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            background: s.c,
+            display: "inline-block",
+            animation: "vs-pulse-ring 1.2s infinite",
+          }}
+        />
+      )}
+      {s.t}
+    </span>
+  );
+}
 
-export default function App() {
-  const [items, setItems] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
-  const [tab, setTab] = useState("upload");
+function Dropzone({ onFiles, multiple }) {
+  const [drag, setDrag] = useState(false);
+  const inputRef = useRef(null);
+  const [error, setError] = useState("");
 
-  const handleFiles = useCallback((files) => {
-    const newItems = files.map((file) => ({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      file, name: file.name, url: URL.createObjectURL(file),
-      status: "pending", result: null,
-    }));
-    setItems((prev) => [...prev, ...newItems]);
-
-    newItems.forEach((item, idx) => {
-      setTimeout(() => {
-        setItems((prev) => prev.map((p) => (p.id === item.id ? { ...p, status: "processing" } : p)));
-      }, 150 + idx * 120);
-
-      const delay = 1100 + (idx % 3) * 350 + Math.random() * 500;
-      setTimeout(() => {
-        const result = mockAnalyze(item.file);
-        setItems((prev) => prev.map((p) => (p.id === item.id ? { ...p, status: "done", result } : p)));
-        setSelectedId((curr) => curr || item.id);
-      }, delay);
-    });
-  }, []);
-
-  const goToVerdict = () => setTab("verdict");
-  const pageProps = { items, selectedId, onSelect: setSelectedId };
+  const accept = (fileList) => {
+    const files = Array.from(fileList);
+    const valid = files.filter((f) => ["image/jpeg", "image/png", "image/jpg"].includes(f.type));
+    if (valid.length !== files.length) {
+      setError("Only JPG and PNG files are supported — other file types were skipped.");
+    } else {
+      setError("");
+    }
+    if (valid.length) {
+      onFiles(multiple ? valid : [valid[0]]);
+    }
+  };
 
   return (
-    <div className="app">
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap');
-
-        :root {
-          /* Shopify-inspired but dark mode, sleek and premium */
-          --bg: #050505;
-          --bg-2: #111111;
-          --ink: #f4f4f5; 
-          --ink-muted: #a1a1aa;
-          --glass-bg: rgba(255, 255, 255, 0.03); 
-          --glass-border: rgba(255, 255, 255, 0.08);
-          --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-          --accent-real: #10b981; 
-          --accent-real-soft: rgba(16, 185, 129, 0.15);
-          --accent-ai: #f43f5e; 
-          --accent-ai-soft: rgba(244, 63, 94, 0.15);
-          --accent-brand: #8b5cf6; 
-        }
-        * { box-sizing: border-box; }
-        
-        /* Animated Background for the realistic world feel */
-        .app {
-          min-height: 100vh;
-          background: var(--bg);
-          position: relative;
-          color: var(--ink); font-family: 'Inter', sans-serif;
-          padding: 24px 20px 64px;
-          overflow-x: hidden;
-        }
-        .app::before {
-          content: "";
-          position: fixed;
-          top: -50%; left: -50%; width: 200%; height: 200%;
-          background: radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.08), transparent 50%),
-                      radial-gradient(circle at 20% 80%, rgba(16, 185, 129, 0.04), transparent 40%),
-                      radial-gradient(circle at 80% 20%, rgba(244, 63, 94, 0.04), transparent 40%);
-          animation: ambientShift 25s ease-in-out infinite alternate;
-          z-index: -1;
-          pointer-events: none;
-        }
-        @keyframes ambientShift {
-          0% { transform: scale(1) translate(0, 0); }
-          50% { transform: scale(1.1) translate(2%, 2%); }
-          100% { transform: scale(1) translate(-2%, -2%); }
-        }
-
-        /* Frosted Glass Animations */
-        @keyframes glassReveal {
-          from { opacity: 0; transform: translateY(20px) scale(0.98); filter: blur(10px); }
-          to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
-        }
-
-        .glass { 
-          background: var(--glass-bg); 
-          border: 1px solid var(--glass-border); 
-          backdrop-filter: blur(24px) saturate(180%); 
-          -webkit-backdrop-filter: blur(24px) saturate(180%); 
-          border-radius: 20px; 
-          box-shadow: var(--glass-shadow);
-          animation: glassReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-          position: relative;
-          overflow: hidden;
-        }
-        .glass::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          border-radius: inherit;
-          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
-          pointer-events: none;
-        }
-
-        .brand { display: flex; align-items: center; gap: 12px; max-width: 980px; margin: 0 auto 32px; animation: glassReveal 0.8s ease forwards; }
-        .brand-mark { width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, var(--accent-real), var(--accent-brand)); display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); }
-        .brand-name { font-family: 'Fraunces', serif; font-size: 22px; letter-spacing: -0.5px; }
-        .brand-tag { color: var(--ink-muted); font-size: 13px; margin-left: 4px; font-weight: 400; }
-
-        .tabbar { max-width: 980px; margin: 0 auto 36px; display: flex; gap: 8px; padding: 6px; overflow-x: auto; background: rgba(255,255,255,0.02); border-radius: 16px; border: 1px solid rgba(255,255,255,0.05); }
-        .tabbar::-webkit-scrollbar { display: none; }
-        .tab-btn {
-          display: flex; align-items: center; gap: 8px; white-space: nowrap;
-          font-family: inherit; font-size: 13px; font-weight: 500; color: var(--ink-muted);
-          background: none; border: none; border-radius: 12px; padding: 10px 16px; cursor: pointer;
-          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-          position: relative;
-        }
-        .tab-btn:hover { background: rgba(255,255,255,0.04); color: var(--ink); transform: translateY(-1px); }
-        .tab-active { background: rgba(255,255,255,0.1) !important; color: var(--ink) !important; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-
-        .page { max-width: 820px; margin: 0 auto; perspective: 1000px; }
-        .page-heading { margin-bottom: 28px; animation: glassReveal 0.5s ease forwards; }
-        .page-heading h2 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 32px; margin: 0 0 10px; letter-spacing: -0.5px; }
-        .page-heading p { color: var(--ink-muted); font-size: 14.5px; margin: 0; max-width: 60ch; line-height: 1.6; }
-        .page-footnote { color: var(--ink-muted); font-size: 13px; margin-top: 18px; }
-
-        .ghost-btn {
-          font-family: inherit; font-size: 14px; font-weight: 500; color: var(--ink);
-          background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
-          border-radius: 12px; padding: 10px 20px; cursor: pointer; 
-          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-          box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-        }
-        .ghost-btn:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.3); }
-        .ghost-btn:active { transform: translateY(0); }
-
-        .upload-zone { 
-          border: 2px dashed rgba(255,255,255,0.15); 
-          border-radius: 24px; 
-          background: linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.0) 100%); 
-          backdrop-filter: blur(12px); 
-          padding: 56px 32px; 
-          cursor: pointer; 
-          transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); 
-          margin-bottom: 12px; 
-          animation: glassReveal 0.6s ease forwards;
-        }
-        .upload-zone.compact { padding: 20px 24px; border-radius: 18px; margin-bottom: 24px; }
-        .upload-zone:hover { border-color: var(--accent-brand); background: rgba(139, 92, 246, 0.03); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
-        .upload-zone.drag { border-color: var(--accent-real); background: rgba(16, 185, 129, 0.08); transform: scale(1.02); }
-        .upload-inner { display: flex; flex-direction: column; align-items: center; gap: 14px; color: var(--ink); }
-        .upload-zone.compact .upload-inner { flex-direction: row; gap: 16px; }
-        .upload-title { font-weight: 600; font-size: 16px; margin: 0; }
-        .upload-sub { color: var(--ink-muted); font-size: 14px; margin: 4px 0 0; }
-        .upload-error { margin-top: 16px; font-size: 13.5px; color: var(--accent-ai); background: var(--accent-ai-soft); border-radius: 10px; padding: 10px 16px; font-weight: 500; border: 1px solid rgba(244, 63, 94, 0.2); }
-
-        .image-picker { display: flex; gap: 12px; margin-bottom: 24px; overflow-x: auto; padding-bottom: 8px; animation: glassReveal 0.7s ease forwards; }
-        .picker-thumb { width: 64px; height: 64px; flex-shrink: 0; border-radius: 14px; overflow: hidden; border: 2px solid transparent; padding: 0; cursor: pointer; opacity: 0.6; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
-        .picker-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
-        .picker-thumb:hover { opacity: 1; transform: translateY(-3px); box-shadow: 0 8px 16px rgba(0,0,0,0.3); }
-        .picker-thumb:hover img { transform: scale(1.08); }
-        .picker-active { border-color: var(--accent-brand); opacity: 1; box-shadow: 0 4px 16px rgba(139, 92, 246, 0.4); }
-
-        .batch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 16px; animation: glassReveal 0.7s ease forwards; }
-        .thumb { position: relative; border-radius: 16px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); background: var(--bg-2); aspect-ratio: 1; padding: 0; cursor: pointer; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-        .thumb:hover { transform: translateY(-4px) scale(1.02); border-color: rgba(255,255,255,0.2); box-shadow: 0 12px 24px rgba(0,0,0,0.4); z-index: 10; }
-        .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: 0.9; transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
-        .thumb:hover img { transform: scale(1.1); }
-        .thumb-active { outline: 2px solid var(--accent-brand); outline-offset: 2px; }
-        .thumb-overlay { position: absolute; top: 8px; left: 8px; }
-        .thumb-tag { position: absolute; bottom: 8px; left: 8px; right: 8px; font-size: 11px; font-weight: 500; padding: 4px 8px; border-radius: 8px; background: rgba(5,5,5,0.85); backdrop-filter: blur(8px); text-align: center; border: 1px solid rgba(255,255,255,0.05); transition: opacity 0.3s ease; }
-        .thumb:hover .thumb-tag { opacity: 0; }
-
-        .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 500; padding: 4px 10px; border-radius: 10px; background: rgba(5,5,5,0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.08); }
-        .badge-processing { color: #fff; } .badge-done { color: var(--accent-real); } .badge-pending { color: var(--ink-muted); }
-        .spin { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
-        .tag-ai { background: var(--accent-ai-soft); color: var(--accent-ai); border-color: rgba(244, 63, 94, 0.2); }
-        .tag-real { background: var(--accent-real-soft); color: var(--accent-real); border-color: rgba(16, 185, 129, 0.2); }
-
-        .verdict-card { padding: 32px; opacity: 0; transform: scale(0.95) translateY(12px); transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
-        .verdict-card.reveal { opacity: 1; transform: scale(1) translateY(0); }
-        .verdict-card::before {
-          content: ""; position: absolute; inset: 0; opacity: 0.1; transition: background 0.5s ease; z-index: -1;
-        }
-        .verdict-card.tone-ai::before { background: radial-gradient(circle at 100% 0%, var(--accent-ai) 0%, transparent 60%); }
-        .verdict-card.tone-real::before { background: radial-gradient(circle at 100% 0%, var(--accent-real) 0%, transparent 60%); }
-
-        .verdict-top { display: flex; align-items: center; gap: 20px; margin-bottom: 24px; }
-        .verdict-icon { width: 56px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
-        .tone-ai .verdict-icon { background: linear-gradient(135deg, rgba(244, 63, 94, 0.2), rgba(244, 63, 94, 0.05)); color: var(--accent-ai); border: 1px solid rgba(244, 63, 94, 0.3); }
-        .tone-real .verdict-icon { background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.05)); color: var(--accent-real); border: 1px solid rgba(16, 185, 129, 0.3); }
-        .verdict-label { font-family: 'Fraunces', serif; font-size: 28px; margin: 0; font-weight: 500; letter-spacing: -0.5px; }
-        .verdict-sub { color: var(--ink-muted); font-size: 14.5px; margin: 4px 0 0; }
-        .verdict-explanation { color: var(--ink); font-size: 15.5px; line-height: 1.7; max-width: 66ch; }
-
-        .conf-track { height: 10px; border-radius: 20px; background: rgba(255,255,255,0.05); overflow: hidden; box-shadow: inset 0 2px 4px rgba(0,0,0,0.3); }
-        .conf-fill { height: 100%; border-radius: 20px; transition: width 1s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 0 12px rgba(255,255,255,0.2); position: relative; }
-        .conf-fill::after {
-          content: ""; position: absolute; inset: 0;
-          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
-          transform: translateX(-100%);
-          animation: shimmer 2.5s infinite ease-in-out;
-        }
-        @keyframes shimmer { 100% { transform: translateX(100%); } }
-
-        .panel { padding: 24px; }
-        .panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; width: 100%; background: none; border: none; color: var(--ink); cursor: default; padding: 0; font-family: inherit; }
-        .panel-head.collapsible { cursor: pointer; margin-bottom: 0; }
-        .panel-head-title { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; }
-        .panel-note { font-size: 13px; color: var(--ink-muted); line-height: 1.6; margin: 16px 0 0; }
-
-        .seg { display: flex; gap: 4px; background: rgba(0,0,0,0.2); border-radius: 12px; padding: 4px; border: 1px solid rgba(255,255,255,0.05); }
-        .seg button { font-size: 12.5px; font-weight: 500; padding: 6px 14px; border-radius: 10px; border: none; background: none; color: var(--ink-muted); cursor: pointer; font-family: inherit; transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
-        .seg-active { background: rgba(255,255,255,0.1) !important; color: var(--ink) !important; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
-
-        .heatmap-frame { position: relative; border-radius: 16px; overflow: hidden; aspect-ratio: 4/3; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
-        .heatmap-frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
-        .heatmap-layer { position: absolute; inset: 0; mix-blend-mode: color-dodge; opacity: 0.9; }
-        .heatmap-side { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-        .heatmap-frame.small { aspect-ratio: 1; }
-        .frame-label { position: absolute; bottom: 10px; left: 10px; font-size: 11px; font-weight: 500; background: rgba(5,5,5,0.8); padding: 4px 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(8px); }
-        .slider-row { display: flex; align-items: center; gap: 12px; margin-top: 20px; color: var(--ink-muted); background: rgba(0,0,0,0.15); padding: 12px 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); }
-        .slider-row input[type="range"] { flex: 1; accent-color: var(--accent-brand); height: 4px; border-radius: 2px; background: rgba(255,255,255,0.1); outline: none; -webkit-appearance: none; }
-        .slider-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--ink); cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.3); transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
-        .slider-row input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.3); }
-        .slider-label { font-size: 12.5px; white-space: nowrap; font-weight: 500; }
-
-        .meta-body { margin-top: 20px; display: flex; flex-direction: column; gap: 14px; animation: glassReveal 0.4s ease forwards; }
-        .meta-row { display: flex; align-items: center; gap: 12px; font-size: 14px; color: var(--ink); background: rgba(255,255,255,0.02); padding: 10px 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.03); transition: background 0.2s ease; }
-        .meta-row:hover { background: rgba(255,255,255,0.04); }
-        .meta-label { color: var(--ink-muted); min-width: 130px; font-size: 13.5px; }
-        .meta-value { font-weight: 500; }
-        .meta-c2pa { display: flex; align-items: center; gap: 10px; font-size: 13.5px; font-weight: 500; padding: 12px 16px; border-radius: 12px; margin-top: 8px; border: 1px solid transparent; }
-        .meta-c2pa.tone-real { background: var(--accent-real-soft); color: var(--accent-real); border-color: rgba(16, 185, 129, 0.2); }
-        .meta-c2pa.tone-ai { background: var(--accent-ai-soft); color: var(--accent-ai); border-color: rgba(244, 63, 94, 0.2); }
-        .meta-c2pa.tone-muted { background: rgba(255,255,255,0.05); color: var(--ink-muted); border-color: rgba(255,255,255,0.1); }
-
-        .robust-frame { border-radius: 16px; overflow: hidden; aspect-ratio: 16/7; margin-bottom: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
-        .robust-frame img { width: 100%; height: 100%; object-fit: cover; display: block; transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
-        .robust-scores { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; background: rgba(0,0,0,0.15); padding: 16px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05); }
-        .robust-scores > div { display: flex; flex-direction: column; gap: 8px; }
-        .score-num { font-size: 13.5px; color: var(--ink-muted); font-weight: 500; }
-
-        .history-list.wide { display: flex; flex-direction: column; gap: 12px; animation: glassReveal 0.6s ease forwards; }
-        .history-item.wide { display: flex; align-items: center; gap: 16px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 16px; padding: 12px 16px; cursor: pointer; text-align: left; transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        .history-item.wide:hover { background: rgba(255,255,255,0.05); transform: translateX(4px); border-color: rgba(255,255,255,0.15); box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
-        .history-item.wide img { width: 56px; height: 56px; object-fit: cover; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
-        .history-meta { display: flex; flex-direction: column; gap: 6px; }
-        .history-name { font-size: 14.5px; font-weight: 500; }
-        .history-verdict { font-size: 11.5px; font-weight: 500; width: fit-content; padding: 4px 10px; border-radius: 8px; border: 1px solid transparent; }
-        .history-active { border-color: var(--accent-brand); background: rgba(139, 92, 246, 0.05); }
-
-        .demo-loading { display: flex; flex-direction: column; gap: 16px; }
-        .demo-row { display: flex; align-items: center; gap: 14px; font-size: 14.5px; font-weight: 500; color: var(--ink-muted); opacity: 0.3; transform: translateX(-10px); transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
-        .demo-row.demo-active { opacity: 1; color: var(--ink); transform: translateX(0); }
-
-        @media (max-width: 640px) { .detail-grid { grid-template-columns: 1fr; } }
-        @media (prefers-reduced-motion: reduce) { * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; } }
-      `}</style>
-
-      <div className="brand">
-        <div className="brand-mark"><ScanEye size={16} color="#0a0f1a" /></div>
-        <span className="brand-name">Verascope</span>
-        <span className="brand-tag">— image authenticity, examined</span>
+    <div>
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
+        onDragLeave={() => setDrag(false)}
+        onDrop={(e) => { e.preventDefault(); setDrag(false); accept(e.dataTransfer.files); }}
+        onClick={() => inputRef.current?.click()}
+        style={{
+          border: `1.5px dashed ${drag ? "var(--cyan)" : "var(--line-strong)"}`,
+          borderRadius: 14,
+          padding: "56px 24px",
+          textAlign: "center",
+          cursor: "pointer",
+          background: drag ? "rgba(95,208,232,.06)" : "rgba(255,255,255,.02)",
+          transition: "border-color .15s ease, background .15s ease",
+        }}
+      >
+        <input ref={inputRef} type="file" accept="image/jpeg,image/png" multiple={multiple} hidden onChange={(e) => accept(e.target.files)} />
+        <div style={{ fontSize: 34, marginBottom: 12 }}>⤒</div>
+        <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>
+          {multiple ? "Drop images here, or click to browse" : "Drop an image here, or click to browse"}
+        </div>
+        <div style={{ fontSize: 13.5, color: "var(--slate)" }}>
+          JPG or PNG {multiple ? "· multiple files supported" : "· single file"}
+        </div>
       </div>
+      {error && <div style={{ color: "var(--amber)", fontSize: 13, marginTop: 10 }}>{error}</div>}
+    </div>
+  );
+}
 
-      <div className="tabbar">
-        {TABS.map((t) => (
-          <button key={t.id} className={`tab-btn ${tab === t.id ? "tab-active" : ""}`} onClick={() => setTab(t.id)}>
-            <t.icon size={14} /> {t.label}
+function ThumbPicker({ items, activeId, onPick }) {
+  if (!items.length) {
+    return <div style={{ color: "var(--slate)", fontSize: 14 }}>No analyzed images yet — upload one first.</div>;
+  }
+  return (
+    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 24, alignItems: "center" }}>
+      <span style={{ fontSize: 12.5, color: "var(--slate)", marginRight: 4 }}>Select target:</span>
+      {items.map((it) => (
+        <button
+          key={it.id}
+          className="vs-btn"
+          onClick={() => onPick(it.id)}
+          style={{
+            width: 58,
+            height: 58,
+            borderRadius: 8,
+            overflow: "hidden",
+            padding: 0,
+            border: `2px solid ${activeId === it.id ? "var(--cyan)" : "var(--line)"}`,
+            background: `url(${it.url}) center/cover`,
+            boxShadow: activeId === it.id ? "0 0 10px rgba(95,208,232,0.4)" : "none",
+          }}
+          title={`${it.name} (${it.verdict})`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function PageHeader({ title, desc }) {
+  return (
+    <div style={{ marginBottom: 26 }}>
+      <h2 className="vs-serif" style={{ fontSize: 26, fontWeight: 500, margin: "0 0 6px" }}>{title}</h2>
+      {desc && <p style={{ color: "var(--slate)", fontSize: 14.5, margin: 0, maxWidth: 600 }}>{desc}</p>}
+    </div>
+  );
+}
+
+function Workspace({ onLogout }) {
+  const [tab, setTab] = useState("verdict");
+  const [items, setItems] = useState(PRESEEDED_ITEMS); // In-memory session list
+  const [activeId, setActiveId] = useState(PRESEEDED_ITEMS[0].id);
+  const [demoLoading, setDemoLoading] = useState(false);
+
+  const doneItems = items.filter((i) => i.status === "done");
+  const active = doneItems.find((i) => i.id === activeId) || doneItems[0];
+
+  const ingest = (files) => {
+    const seeds = files.map((f, idx) => ({
+      file: f,
+      status: "pending",
+      id: `${f.name}-${Date.now()}-${idx}`,
+    }));
+    setItems((prev) => [
+      ...prev,
+      ...seeds.map((s) => ({
+        id: s.id,
+        name: s.file.name,
+        url: URL.createObjectURL(s.file),
+        status: "pending",
+      })),
+    ]);
+    seeds.forEach((s, i) => {
+      setTimeout(() => {
+        setItems((prev) => prev.map((p) => (p.id === s.id ? { ...p, status: "analyzing" } : p)));
+      }, 300 + i * 200);
+      setTimeout(() => {
+        const result = mockAnalyze(s.file, Array.from(s.file.name).reduce((a, c) => a + c.charCodeAt(0), 0) + i);
+        setItems((prev) => prev.map((p) => (p.id === s.id ? { ...result, id: s.id, status: "done" } : p)));
+        setActiveId(s.id);
+      }, 1400 + i * 500);
+    });
+    if (files.length === 1) setTab("verdict");
+    else setTab("batch");
+  };
+
+  const loadDemoSample = (type) => {
+    if (type === "real") {
+      const realItem = {
+        ...PRESEEDED_ITEMS[0],
+        id: `editorial-sample-${Date.now()}`,
+        name: `press_wire_${Math.floor(Math.random() * 899 + 100)}.jpg`,
+      };
+      setItems((prev) => [realItem, ...prev]);
+      setActiveId(realItem.id);
+      setTab("verdict");
+    } else {
+      const aiItem = {
+        ...PRESEEDED_ITEMS[1],
+        id: `diffusion-sample-${Date.now()}`,
+        name: `synthetic_diffusion_${Math.floor(Math.random() * 899 + 100)}.png`,
+      };
+      setItems((prev) => [aiItem, ...prev]);
+      setActiveId(aiItem.id);
+      setTab("verdict");
+    }
+  };
+
+  return (
+    <div style={{ minHeight: "100vh" }}>
+      <header
+        style={{
+          borderBottom: "1px solid var(--line)",
+          position: "sticky",
+          top: 0,
+          background: "rgba(11,18,32,.85)",
+          backdropFilter: "blur(10px)",
+          WebkitBackdropFilter: "blur(10px)",
+          zIndex: 10,
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 1160,
+            margin: "0 auto",
+            padding: "16px 28px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+            <MarkIcon size={22} />
+            <span className="vs-serif" style={{ fontSize: 17, fontWeight: 560 }}>Verascope</span>
+            <span style={{ fontSize: 11.5, color: "var(--slate-dim)", marginLeft: 6, borderLeft: "1px solid var(--line)", paddingLeft: 10 }}>
+              Forensic Workspace
+            </span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <GhostButton onClick={onLogout} style={{ padding: "8px 14px", fontSize: 13 }}>
+              Log out
+            </GhostButton>
+          </div>
+        </div>
+        <div
+          className="vs-scrollbar"
+          style={{
+            maxWidth: 1160,
+            margin: "0 auto",
+            padding: "0 28px",
+            display: "flex",
+            gap: 4,
+            overflowX: "auto",
+          }}
+        >
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              className="vs-tab vs-btn"
+              onClick={() => setTab(t.id)}
+              style={{
+                background: "transparent",
+                color: tab === t.id ? "var(--ink)" : "var(--slate)",
+                padding: "12px 14px",
+                fontSize: 13.5,
+                borderBottom: `2px solid ${tab === t.id ? "var(--cyan)" : "transparent"}`,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      <main style={{ maxWidth: 1160, margin: "0 auto", padding: "36px 28px 80px" }}>
+        {/* Tab 1: Upload */}
+        {tab === "upload" && (
+          <>
+            <PageHeader
+              title="Upload an image"
+              desc="Single-image check. Drop a JPG or PNG to run it through the forensic reasoning pipeline."
+            />
+            <div style={{ maxWidth: 620 }}>
+              <Dropzone multiple={false} onFiles={ingest} />
+              <div style={{ marginTop: 20, display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 13, color: "var(--slate)" }}>Quick test presets:</span>
+                <button
+                  className="vs-btn"
+                  onClick={() => loadDemoSample("real")}
+                  style={{
+                    background: "rgba(95,208,232,0.1)",
+                    color: "var(--cyan)",
+                    border: "1px solid var(--cyan-dim)",
+                    padding: "6px 12px",
+                    borderRadius: 6,
+                    fontSize: 12.5,
+                  }}
+                >
+                  + Add sample photo (likely real)
+                </button>
+                <button
+                  className="vs-btn"
+                  onClick={() => loadDemoSample("ai")}
+                  style={{
+                    background: "rgba(240,166,61,0.1)",
+                    color: "var(--amber)",
+                    border: "1px solid var(--amber-dim)",
+                    padding: "6px 12px",
+                    borderRadius: 6,
+                    fontSize: 12.5,
+                  }}
+                >
+                  + Add sample portrait (likely AI)
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Tab 2: Batch */}
+        {tab === "batch" && (
+          <>
+            <PageHeader
+              title="Batch upload"
+              desc="Check several images at once. Each gets its own status as it moves through the queue."
+            />
+            <div style={{ maxWidth: 620, marginBottom: 32 }}>
+              <Dropzone multiple onFiles={ingest} />
+            </div>
+            {items.length > 0 && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))", gap: 16 }}>
+                {items.map((it) => (
+                  <GlassPanel
+                    key={it.id}
+                    style={{
+                      padding: 10,
+                      cursor: it.status === "done" ? "pointer" : "default",
+                      borderColor: activeId === it.id ? "var(--cyan)" : "var(--line)",
+                    }}
+                  >
+                    <div
+                      onClick={() => {
+                        if (it.status === "done") {
+                          setActiveId(it.id);
+                          setTab("verdict");
+                        }
+                      }}
+                      style={{
+                        borderRadius: 8,
+                        overflow: "hidden",
+                        aspectRatio: "1/1",
+                        background: `url(${it.url}) center/cover`,
+                        marginBottom: 10,
+                      }}
+                    />
+                    <div
+                      style={{
+                        fontSize: 12.5,
+                        marginBottom: 6,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                      title={it.name}
+                    >
+                      {it.name}
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <StatusPill status={it.status} />
+                      {it.status === "done" && (
+                        <span style={{ fontSize: 11.5, color: it.isAI ? "var(--amber)" : "var(--cyan)" }}>
+                          {it.confidence}%
+                        </span>
+                      )}
+                    </div>
+                  </GlassPanel>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Tab 3: Verdict */}
+        {tab === "verdict" && (
+          <>
+            <PageHeader
+              title="Verdict"
+              desc="Always hedged — a likelihood label with a confidence percentage, never an absolute claim."
+            />
+            <ThumbPicker items={doneItems} activeId={active?.id} onPick={setActiveId} />
+            {active ? (
+              <GlassPanel style={{ padding: 30, maxWidth: 580 }}>
+                <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
+                  <div
+                    style={{
+                      width: 96,
+                      height: 96,
+                      borderRadius: 10,
+                      overflow: "hidden",
+                      flexShrink: 0,
+                      background: `url(${active.url}) center/cover`,
+                      border: "1px solid var(--line-strong)",
+                    }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div
+                      className="vs-serif"
+                      style={{
+                        fontSize: 24,
+                        fontWeight: 500,
+                        color: active.isAI ? "var(--amber)" : "var(--cyan)",
+                        marginBottom: 10,
+                      }}
+                    >
+                      {active.verdict}
+                    </div>
+                    <ScoreBar value={active.confidence} isAI={active.isAI} />
+                    <div style={{ fontSize: 13.5, color: "var(--slate)", marginTop: 8, display: "flex", justifyContent: "space-between" }}>
+                      <span>Hedged model confidence</span>
+                      <strong style={{ color: "var(--ink)" }}>{active.confidence}%</strong>
+                    </div>
+                  </div>
+                </div>
+              </GlassPanel>
+            ) : (
+              <div style={{ color: "var(--slate)" }}>No images analyzed yet.</div>
+            )}
+          </>
+        )}
+
+        {/* Tab 4: Attention Map */}
+        {tab === "heatmap" && (
+          <>
+            <PageHeader
+              title="Attention map"
+              desc="The regions that most influenced the verdict, overlaid on the original image."
+            />
+            <ThumbPicker items={doneItems} activeId={active?.id} onPick={setActiveId} />
+            {active && <HeatmapPanel item={active} />}
+          </>
+        )}
+
+        {/* Tab 5: Explanation */}
+        {tab === "explanation" && (
+          <>
+            <PageHeader
+              title="Explanation"
+              desc="The reasoning behind the verdict, written in plain language for fact-checkers and editors."
+            />
+            <ThumbPicker items={doneItems} activeId={active?.id} onPick={setActiveId} />
+            {active && (
+              <GlassPanel style={{ padding: 28, maxWidth: 640 }}>
+                <div style={{ fontSize: 12.5, color: "var(--slate)", marginBottom: 12 }}>
+                  Why the model reached this verdict:
+                </div>
+                <p style={{ fontSize: 15.5, lineHeight: 1.7, margin: 0, color: "var(--ink)" }}>
+                  {active.explanation}
+                </p>
+              </GlassPanel>
+            )}
+          </>
+        )}
+
+        {/* Tab 6: Metadata */}
+        {tab === "metadata" && (
+          <>
+            <PageHeader
+              title="Metadata & provenance"
+              desc="Camera, timestamp, editing history, and C2PA content-credential status. Structured placeholder fields ready for live EXIF/C2PA parsers."
+            />
+            <ThumbPicker items={doneItems} activeId={active?.id} onPick={setActiveId} />
+            {active && <MetadataPanel item={active} />}
+          </>
+        )}
+
+        {/* Tab 7: Robustness */}
+        {tab === "robustness" && (
+          <>
+            <PageHeader
+              title="Robustness check"
+              desc="Comparison between original and compressed/resized confidence to evaluate stability under platform re-encoding."
+            />
+            <ThumbPicker items={doneItems} activeId={active?.id} onPick={setActiveId} />
+            {active && <RobustnessPanel item={active} />}
+          </>
+        )}
+
+        {/* Tab 8: History */}
+        {tab === "history" && (
+          <>
+            <PageHeader
+              title="Session history"
+              desc="Every image checked during this active session. Nothing persists after you close or refresh."
+            />
+            {doneItems.length === 0 ? (
+              <div style={{ color: "var(--slate)" }}>Nothing checked yet.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 640 }}>
+                {doneItems.slice().reverse().map((it) => (
+                  <GlassPanel
+                    key={it.id}
+                    style={{
+                      padding: 14,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 14,
+                      cursor: "pointer",
+                      borderColor: activeId === it.id ? "var(--cyan)" : "var(--line)",
+                    }}
+                  >
+                    <div
+                      onClick={() => {
+                        setActiveId(it.id);
+                        setTab("verdict");
+                      }}
+                      style={{ display: "flex", alignItems: "center", gap: 14, flex: 1 }}
+                    >
+                      <div
+                        style={{
+                          width: 44,
+                          height: 44,
+                          borderRadius: 7,
+                          overflow: "hidden",
+                          background: `url(${it.url}) center/cover`,
+                          flexShrink: 0,
+                        }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 14, fontWeight: 500 }}>{it.name}</div>
+                        <div style={{ fontSize: 12.5, color: it.isAI ? "var(--amber)" : "var(--cyan)", marginTop: 2 }}>
+                          {it.verdict} · {it.confidence}%
+                        </div>
+                      </div>
+                      <span style={{ fontSize: 12, color: "var(--slate-dim)" }}>View details →</span>
+                    </div>
+                  </GlassPanel>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Tab 9: Loading State */}
+        {tab === "loading" && (
+          <>
+            <PageHeader
+              title="Loading state"
+              desc="What the interface shows while predict() runs asynchronously across the forensic pipeline."
+            />
+            <div style={{ display: "flex", gap: 14, marginBottom: 30 }}>
+              <PrimaryButton
+                onClick={() => {
+                  setDemoLoading(true);
+                  setTimeout(() => setDemoLoading(false), 2200);
+                }}
+              >
+                Simulate processing
+              </PrimaryButton>
+            </div>
+            {demoLoading ? (
+              <GlassPanel style={{ padding: 40, maxWidth: 420, textAlign: "center" }}>
+                <div
+                  style={{
+                    width: 34,
+                    height: 34,
+                    margin: "0 auto 16px",
+                    borderRadius: "50%",
+                    border: "3px solid rgba(255,255,255,.12)",
+                    borderTopColor: "var(--cyan)",
+                    animation: "vs-spin .8s linear infinite",
+                  }}
+                />
+                <div style={{ fontSize: 14.5, color: "var(--slate)" }}>Running forensic analysis…</div>
+                <div style={{ fontSize: 12, color: "var(--slate-dim)", marginTop: 6 }}>
+                  Extracting sensor noise & latent diffusion residuals
+                </div>
+              </GlassPanel>
+            ) : (
+              <div style={{ color: "var(--slate)", fontSize: 14 }}>
+                Idle. Click above to preview the simulated processing spinner.
+              </div>
+            )}
+            {items.some((i) => i.status !== "done") && (
+              <div style={{ marginTop: 30 }}>
+                <div style={{ fontSize: 13, color: "var(--slate)", marginBottom: 10 }}>Currently mid-analysis:</div>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  {items.filter((i) => i.status !== "done").map((i) => (
+                    <StatusPill key={i.id} status={i.status} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function HeatmapPanel({ item }) {
+  const [mode, setMode] = useState("overlay");
+  const [intensity, setIntensity] = useState(70);
+
+  return (
+    <GlassPanel style={{ padding: 24, maxWidth: 680 }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+        {["overlay", "side-by-side"].map((m) => (
+          <button
+            key={m}
+            className="vs-btn"
+            onClick={() => setMode(m)}
+            style={{
+              background: mode === m ? "rgba(95,208,232,.14)" : "transparent",
+              color: mode === m ? "var(--cyan)" : "var(--slate)",
+              border: `1px solid ${mode === m ? "var(--cyan)" : "var(--line)"}`,
+              borderRadius: 7,
+              padding: "7px 14px",
+              fontSize: 13,
+              textTransform: "capitalize",
+            }}
+          >
+            {m}
           </button>
         ))}
       </div>
 
-      {tab === "upload" && <UploadPage onFiles={handleFiles} items={items} />}
-      {tab === "batch" && <BatchPage items={items} onFiles={handleFiles} selectedId={selectedId} onSelect={setSelectedId} goToVerdict={goToVerdict} />}
-      {tab === "verdict" && <VerdictPage {...pageProps} />}
-      {tab === "heatmap" && <HeatmapPage {...pageProps} />}
-      {tab === "explanation" && <ExplanationPage {...pageProps} />}
-      {tab === "metadata" && <MetadataPage {...pageProps} />}
-      {tab === "robustness" && <RobustnessPage {...pageProps} />}
-      {tab === "history" && <HistoryPage items={items} selectedId={selectedId} onSelect={setSelectedId} goToVerdict={goToVerdict} />}
-      {tab === "loading" && <LoadingPage items={items} />}
+      {mode === "overlay" ? (
+        <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", aspectRatio: "4/3", background: "#0d1524" }}>
+          <img src={item.url} alt={item.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          <svg viewBox="0 0 100 75" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: intensity / 100 }}>
+            {item.heatSpots.map((s, i) => (
+              <ellipse
+                key={i}
+                cx={s.x}
+                cy={s.y * 0.75}
+                rx={s.r}
+                ry={s.r * 0.75}
+                fill={item.isAI ? "#F0A63D" : "#5FD0E8"}
+                opacity="0.55"
+              />
+            ))}
+          </svg>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ borderRadius: 10, overflow: "hidden", aspectRatio: "4/3", background: "#0d1524" }}>
+            <img src={item.url} alt="original" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          </div>
+          <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", aspectRatio: "4/3", background: "#0d1524" }}>
+            <img src={item.url} alt="heatmap" style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.35 }} />
+            <svg viewBox="0 0 100 75" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
+              {item.heatSpots.map((s, i) => (
+                <ellipse
+                  key={i}
+                  cx={s.x}
+                  cy={s.y * 0.75}
+                  rx={s.r}
+                  ry={s.r * 0.75}
+                  fill={item.isAI ? "#F0A63D" : "#5FD0E8"}
+                  opacity="0.65"
+                />
+              ))}
+            </svg>
+          </div>
+        </div>
+      )}
+
+      <div style={{ marginTop: 18 }}>
+        <div style={{ fontSize: 12.5, color: "var(--slate)", marginBottom: 8, display: "flex", justifyContent: "space-between" }}>
+          <span>Overlay intensity</span>
+          <span>{intensity}%</span>
+        </div>
+        <input
+          type="range"
+          min="10"
+          max="100"
+          value={intensity}
+          onChange={(e) => setIntensity(+e.target.value)}
+          style={{ width: "100%", accentColor: "#5FD0E8", cursor: "pointer" }}
+        />
+      </div>
+    </GlassPanel>
+  );
+}
+
+function MetadataPanel({ item }) {
+  const [open, setOpen] = useState(true);
+  const rows = [
+    ["Camera make / model", item.metadata.camera],
+    ["Timestamp", item.metadata.timestamp],
+    ["Editing software detected", item.metadata.editor],
+    ["C2PA content credentials", item.metadata.c2pa],
+  ];
+
+  return (
+    <GlassPanel style={{ maxWidth: 620, overflow: "hidden" }}>
+      <button
+        className="vs-btn"
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          width: "100%",
+          background: "transparent",
+          color: "var(--ink)",
+          padding: "18px 24px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          fontSize: 15,
+        }}
+      >
+        <span>Provenance details</span>
+        <span style={{ color: "var(--slate)", transform: open ? "rotate(180deg)" : "none", transition: "transform .2s" }}>⌄</span>
+      </button>
+      {open && (
+        <div style={{ borderTop: "1px solid var(--line)" }}>
+          {rows.map(([k, v]) => (
+            <div
+              key={k}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                padding: "14px 24px",
+                borderBottom: "1px solid var(--line)",
+                fontSize: 14,
+              }}
+            >
+              <span style={{ color: "var(--slate)" }}>{k}</span>
+              <span style={{ fontWeight: 500, color: "var(--ink)" }}>{v}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </GlassPanel>
+  );
+}
+
+function RobustnessPanel({ item }) {
+  const delta = item.robustness.compressed - item.robustness.original;
+
+  return (
+    <GlassPanel style={{ padding: 28, maxWidth: 620 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 22 }}>
+        <div>
+          <div style={{ fontSize: 12.5, color: "var(--slate)", marginBottom: 10 }}>Original image</div>
+          <div className="vs-serif" style={{ fontSize: 28, marginBottom: 8 }}>{item.robustness.original}%</div>
+          <ScoreBar value={item.robustness.original} isAI={item.isAI} />
+        </div>
+        <div>
+          <div style={{ fontSize: 12.5, color: "var(--slate)", marginBottom: 10 }}>Compressed / resized</div>
+          <div className="vs-serif" style={{ fontSize: 28, marginBottom: 8 }}>{item.robustness.compressed}%</div>
+          <ScoreBar value={item.robustness.compressed} isAI={item.isAI} />
+        </div>
+      </div>
+      <p style={{ fontSize: 13.5, color: "var(--slate)", marginTop: 22, marginBottom: 0, lineHeight: 1.55 }}>
+        {Math.abs(delta) <= 5
+          ? "The score held steady under compression — indicating the verdict does not rely on fragile or easily destroyed pixel artifacts."
+          : "The score shifted noticeably after compression, which should be considered when assessing the weight of this result."}
+      </p>
+    </GlassPanel>
+  );
+}
+
+/* ============================================================
+   ROOT APPLICATION
+   Synchronizes local state with URL hash (#/, #/login, #/signup, #/app)
+   ============================================================ */
+
+export default function App() {
+  const getInitialView = () => {
+    const hash = window.location.hash.replace("#/", "").replace("#", "");
+    if (hash === "login" || hash === "signup" || hash === "app") return hash;
+    return "landing";
+  };
+
+  const [view, setView] = useState(getInitialView);
+
+  const navigateTo = (nextView) => {
+    setView(nextView);
+    window.location.hash = `#/${nextView === "landing" ? "" : nextView}`;
+  };
+
+  useEffect(() => {
+    const handleHash = () => {
+      const h = window.location.hash.replace("#/", "").replace("#", "");
+      if (h === "login" || h === "signup" || h === "app") {
+        setView(h);
+      } else {
+        setView("landing");
+      }
+    };
+    window.addEventListener("hashchange", handleHash);
+    return () => window.removeEventListener("hashchange", handleHash);
+  }, []);
+
+  return (
+    <div
+      className="vs-root"
+      style={{
+        background: view === "landing" ? "var(--navy-950)" : "var(--navy-900)",
+        minHeight: "100vh",
+      }}
+    >
+      <style>{GLOBAL_CSS}</style>
+      {view === "landing" && <Landing goto={navigateTo} />}
+      {view === "login" && <Login goto={navigateTo} onAuthed={() => navigateTo("app")} />}
+      {view === "signup" && <Signup goto={navigateTo} onAuthed={() => navigateTo("app")} />}
+      {view === "app" && <Workspace onLogout={() => navigateTo("landing")} />}
     </div>
   );
 }
