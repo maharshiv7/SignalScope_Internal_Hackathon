@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
+  Sun,
+  Moon,
   ShieldCheck,
   ShieldAlert,
   Sparkles,
@@ -32,6 +34,40 @@ import {
 } from 'lucide-react';
 import { soundEngine } from './sound';
 import { MagneticCursor } from './MagneticCursor';
+
+/* ============================================================
+   THEME TOGGLE
+   ============================================================ */
+
+function ThemeToggle({ theme, onToggle }) {
+  return (
+    <button
+      onClick={() => {
+        soundEngine.playClick();
+        onToggle();
+      }}
+      title={theme === 'dark' ? 'Switch to White Mode' : 'Switch to Dark Mode'}
+      style={{
+        background: 'transparent',
+        border: '1px solid var(--border-medium)',
+        color: 'var(--cream-ink)',
+        padding: '7px 13px',
+        borderRadius: 8,
+        fontSize: 12.5,
+        fontWeight: 500,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 7,
+        cursor: 'pointer',
+        transition: 'all .2s ease',
+      }}
+      data-cursor="interactive"
+    >
+      {theme === 'dark' ? <Sun size={15} style={{ color: 'var(--amber)' }} /> : <Moon size={15} style={{ color: 'var(--cyan)' }} />}
+      <span>{theme === 'dark' ? 'White Mode' : 'Dark Mode'}</span>
+    </button>
+  );
+}
 
 /* ============================================================
    HIGH-PRECISION FORENSIC SVG BENCHMARKS
@@ -186,7 +222,6 @@ function Curtain({ onComplete }) {
         pointerEvents: opening ? 'none' : 'auto',
       }}
     >
-      {/* Top Leaf */}
       <div
         style={{
           position: 'absolute',
@@ -194,13 +229,12 @@ function Curtain({ onComplete }) {
           left: 0,
           right: 0,
           height: '50%',
-          backgroundColor: '#0e0b08',
-          borderBottom: '1px solid rgba(232, 157, 67, 0.25)',
+          backgroundColor: 'var(--bg-screening)',
+          borderBottom: '1px solid var(--border-focus)',
           transform: opening ? 'translateY(-100%)' : 'translateY(0)',
           transition: 'transform 0.65s cubic-bezier(0.77, 0, 0.175, 1)',
         }}
       />
-      {/* Bottom Leaf */}
       <div
         style={{
           position: 'absolute',
@@ -208,14 +242,13 @@ function Curtain({ onComplete }) {
           left: 0,
           right: 0,
           height: '50%',
-          backgroundColor: '#0e0b08',
-          borderTop: '1px solid rgba(232, 157, 67, 0.25)',
+          backgroundColor: 'var(--bg-screening)',
+          borderTop: '1px solid var(--border-focus)',
           transform: opening ? 'translateY(100%)' : 'translateY(0)',
           transition: 'transform 0.65s cubic-bezier(0.77, 0, 0.175, 1)',
         }}
       />
 
-      {/* Center Slate Ticker */}
       <div
         style={{
           position: 'absolute',
@@ -258,7 +291,7 @@ function Curtain({ onComplete }) {
 }
 
 /* ============================================================
-   CINEMATIC HEADER WITH NUMBERED FRACTIONS & CONTROLS
+   CINEMATIC HEADER WITH NUMBERED FRACTIONS & WHITE MODE TOGGLE
    ============================================================ */
 
 function Header({
@@ -267,6 +300,8 @@ function Header({
   onToggleSound,
   gridEnabled,
   onToggleGrid,
+  theme,
+  onToggleTheme,
   onOpenWorkspace,
 }) {
   const sections = [
@@ -296,9 +331,9 @@ function Header({
         zIndex: 100,
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
-        backgroundColor: 'rgba(19, 16, 12, 0.72)',
-        borderBottom: '1px solid rgba(244, 239, 230, 0.07)',
-        transition: 'background-color 0.3s ease',
+        backgroundColor: 'var(--bg-panel)',
+        borderBottom: '1px solid var(--border-subtle)',
+        transition: 'background-color 0.3s ease, border-color 0.3s ease',
       }}
     >
       <div
@@ -327,7 +362,7 @@ function Header({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              backgroundColor: 'rgba(232, 157, 67, 0.08)',
+              backgroundColor: 'var(--amber-glow)',
             }}
           >
             <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: 'var(--amber)' }} />
@@ -401,8 +436,9 @@ function Header({
           })}
         </nav>
 
-        {/* Header Ambient Controls & Suite CTA */}
+        {/* Controls: Sound, Grid, White Mode Toggle, Suite CTA */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {/* Audio Synthesizer Toggle */}
           <button
             onClick={() => {
               soundEngine.playClick();
@@ -411,7 +447,7 @@ function Header({
             title={soundEnabled ? 'Disable tactile acoustic feedback' : 'Enable tactile acoustic feedback'}
             style={{
               background: 'transparent',
-              border: '1px solid rgba(244, 239, 230, 0.12)',
+              border: '1px solid var(--border-medium)',
               color: soundEnabled ? 'var(--amber)' : 'var(--cream-dim)',
               width: 36,
               height: 36,
@@ -426,6 +462,7 @@ function Header({
             {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
           </button>
 
+          {/* 35mm Grid Overlay Toggle */}
           <button
             onClick={() => {
               soundEngine.playClick();
@@ -434,7 +471,7 @@ function Header({
             title={gridEnabled ? 'Disable film grid' : 'Enable film grid'}
             style={{
               background: 'transparent',
-              border: '1px solid rgba(244, 239, 230, 0.12)',
+              border: '1px solid var(--border-medium)',
               color: gridEnabled ? 'var(--amber)' : 'var(--cream-dim)',
               width: 36,
               height: 36,
@@ -449,6 +486,10 @@ function Header({
             <Grid size={16} />
           </button>
 
+          {/* White Mode / Dark Mode Toggle */}
+          <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+
+          {/* Live Forensics Suite Switch */}
           <button
             onClick={() => {
               soundEngine.playReveal();
@@ -456,7 +497,7 @@ function Header({
             }}
             style={{
               backgroundColor: 'var(--amber)',
-              color: '#13100c',
+              color: '#ffffff',
               border: 'none',
               padding: '8px 18px',
               borderRadius: 8,
@@ -468,7 +509,7 @@ function Header({
               alignItems: 'center',
               gap: 8,
               cursor: 'pointer',
-              boxShadow: '0 4px 18px rgba(232, 157, 67, 0.25)',
+              boxShadow: '0 4px 18px var(--amber-glow)',
               transition: 'transform 0.15s ease, box-shadow 0.15s ease',
             }}
             data-cursor="interactive"
@@ -498,8 +539,9 @@ function HeroSection({ onOpenWorkspace }) {
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center',
-        borderBottom: '1px solid rgba(244, 239, 230, 0.08)',
+        borderBottom: '1px solid var(--border-subtle)',
         overflow: 'hidden',
+        backgroundColor: 'var(--bg-screening)',
       }}
     >
       <div className="ambient-hero-glow" style={{ top: '15%', left: '20%' }} />
@@ -512,8 +554,8 @@ function HeroSection({ onOpenWorkspace }) {
             gap: 10,
             padding: '6px 14px',
             borderRadius: 30,
-            border: '1px solid rgba(232, 157, 67, 0.3)',
-            backgroundColor: 'rgba(232, 157, 67, 0.06)',
+            border: '1px solid var(--border-focus)',
+            backgroundColor: 'var(--amber-glow)',
             marginBottom: 28,
           }}
         >
@@ -578,7 +620,7 @@ function HeroSection({ onOpenWorkspace }) {
             }}
             style={{
               backgroundColor: 'var(--amber)',
-              color: '#13100c',
+              color: '#ffffff',
               border: 'none',
               padding: '16px 32px',
               borderRadius: 10,
@@ -588,7 +630,7 @@ function HeroSection({ onOpenWorkspace }) {
               display: 'flex',
               alignItems: 'center',
               gap: 10,
-              boxShadow: '0 8px 30px rgba(232, 157, 67, 0.28)',
+              boxShadow: '0 8px 30px var(--amber-glow)',
             }}
             data-cursor="interactive"
           >
@@ -602,7 +644,7 @@ function HeroSection({ onOpenWorkspace }) {
             style={{
               background: 'transparent',
               color: 'var(--cream-ink)',
-              border: '1px solid rgba(244, 239, 230, 0.16)',
+              border: '1px solid var(--border-medium)',
               padding: '15px 28px',
               borderRadius: 10,
               fontSize: 15,
@@ -626,7 +668,7 @@ function HeroSection({ onOpenWorkspace }) {
             gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
             gap: 24,
             paddingTop: 36,
-            borderTop: '1px solid rgba(244, 239, 230, 0.08)',
+            borderTop: '1px solid var(--border-subtle)',
           }}
         >
           <div>
@@ -710,8 +752,9 @@ function SelectedWorksSection() {
       id="works"
       style={{
         padding: '120px 0',
-        borderBottom: '1px solid rgba(244, 239, 230, 0.08)',
+        borderBottom: '1px solid var(--border-subtle)',
         position: 'relative',
+        backgroundColor: 'var(--bg-surface)',
       }}
     >
       <div style={{ maxWidth: 1340, margin: '0 auto', padding: '0 28px' }}>
@@ -738,8 +781,8 @@ function SelectedWorksSection() {
             height: 'clamp(340px, 55vw, 620px)',
             borderRadius: 16,
             overflow: 'hidden',
-            border: '1px solid rgba(244, 239, 230, 0.12)',
-            boxShadow: '0 30px 80px rgba(0, 0, 0, 0.6)',
+            border: '1px solid var(--border-medium)',
+            boxShadow: '0 30px 80px rgba(0, 0, 0, 0.35)',
             cursor: 'ew-resize',
             marginBottom: 60,
           }}
@@ -774,7 +817,7 @@ function SelectedWorksSection() {
                 left: 24,
                 padding: '6px 14px',
                 borderRadius: 6,
-                backgroundColor: 'rgba(19, 16, 12, 0.85)',
+                backgroundColor: 'var(--bg-panel)',
                 border: '1px solid var(--amber)',
                 color: 'var(--amber)',
                 fontSize: 11,
@@ -793,8 +836,8 @@ function SelectedWorksSection() {
               right: 24,
               padding: '6px 14px',
               borderRadius: 6,
-              backgroundColor: 'rgba(19, 16, 12, 0.85)',
-              border: '1px solid rgba(244, 239, 230, 0.2)',
+              backgroundColor: 'var(--bg-panel)',
+              border: '1px solid var(--border-medium)',
               color: 'var(--cream-ink)',
               fontSize: 11,
               fontFamily: "'JetBrains Mono', monospace",
@@ -814,14 +857,14 @@ function SelectedWorksSection() {
               height: 36,
               borderRadius: '50%',
               backgroundColor: 'var(--amber)',
-              color: '#13100c',
+              color: '#ffffff',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontWeight: 700,
               fontSize: 14,
               pointerEvents: 'none',
-              boxShadow: '0 0 20px rgba(232, 157, 67, 0.6)',
+              boxShadow: '0 0 20px var(--amber-glow)',
             }}
           >
             ↔
@@ -835,8 +878,8 @@ function SelectedWorksSection() {
               style={{
                 padding: 28,
                 borderRadius: 14,
-                backgroundColor: 'var(--bg-surface)',
-                border: '1px solid rgba(244, 239, 230, 0.08)',
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-subtle)',
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
@@ -865,7 +908,7 @@ function SelectedWorksSection() {
                 style={{
                   marginTop: 24,
                   paddingTop: 16,
-                  borderTop: '1px solid rgba(244, 239, 230, 0.06)',
+                  borderTop: '1px solid var(--border-subtle)',
                   fontSize: 12,
                   color: 'var(--cyan)',
                 }}
@@ -890,8 +933,8 @@ function SpotlightSection() {
       id="spotlight"
       style={{
         padding: '120px 0',
-        borderBottom: '1px solid rgba(244, 239, 230, 0.08)',
-        backgroundColor: '#100d09',
+        borderBottom: '1px solid var(--border-subtle)',
+        backgroundColor: 'var(--bg-screening)',
         position: 'relative',
       }}
     >
@@ -917,8 +960,8 @@ function SpotlightSection() {
                 display: 'inline-block',
                 padding: '4px 10px',
                 borderRadius: 6,
-                backgroundColor: 'rgba(232, 157, 67, 0.1)',
-                border: '1px solid rgba(232, 157, 67, 0.3)',
+                backgroundColor: 'var(--amber-glow)',
+                border: '1px solid var(--border-focus)',
                 color: 'var(--amber)',
                 fontSize: 11,
                 fontFamily: "'JetBrains Mono', monospace",
@@ -935,7 +978,7 @@ function SpotlightSection() {
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ padding: 16, borderRadius: 10, backgroundColor: 'rgba(244, 239, 230, 0.03)', border: '1px solid rgba(244, 239, 230, 0.08)' }}>
+              <div style={{ padding: 16, borderRadius: 10, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
                 <div className="font-mono" style={{ fontSize: 12, color: 'var(--amber)', marginBottom: 4 }}>
                   STAGE 1 · FREQUENCY SPECTRUM
                 </div>
@@ -944,7 +987,7 @@ function SpotlightSection() {
                 </div>
               </div>
 
-              <div style={{ padding: 16, borderRadius: 10, backgroundColor: 'rgba(244, 239, 230, 0.03)', border: '1px solid rgba(244, 239, 230, 0.08)' }}>
+              <div style={{ padding: 16, borderRadius: 10, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
                 <div className="font-mono" style={{ fontSize: 12, color: 'var(--cyan)', marginBottom: 4 }}>
                   STAGE 2 · PROVENANCE LEDGER
                 </div>
@@ -953,7 +996,7 @@ function SpotlightSection() {
                 </div>
               </div>
 
-              <div style={{ padding: 16, borderRadius: 10, backgroundColor: 'rgba(244, 239, 230, 0.03)', border: '1px solid rgba(244, 239, 230, 0.08)' }}>
+              <div style={{ padding: 16, borderRadius: 10, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
                 <div className="font-mono" style={{ fontSize: 12, color: 'var(--cream-muted)', marginBottom: 4 }}>
                   FINAL VERDICT · HEDGED
                 </div>
@@ -968,9 +1011,9 @@ function SpotlightSection() {
             style={{
               padding: 24,
               borderRadius: 16,
-              backgroundColor: 'var(--bg-surface)',
-              border: '1px solid rgba(244, 239, 230, 0.1)',
-              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)',
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-medium)',
+              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.25)',
             }}
             data-cursor="inspect"
           >
@@ -992,7 +1035,7 @@ function SpotlightSection() {
                 style={{
                   position: 'absolute',
                   inset: 0,
-                  border: '2px dashed rgba(232, 157, 67, 0.5)',
+                  border: '2px dashed var(--amber)',
                   pointerEvents: 'none',
                 }}
               />
@@ -1053,17 +1096,18 @@ function ToolkitSection() {
       id="toolkit"
       style={{
         padding: '120px 0',
-        borderBottom: '1px solid rgba(244, 239, 230, 0.08)',
+        borderBottom: '1px solid var(--border-subtle)',
         position: 'relative',
         overflow: 'hidden',
+        backgroundColor: 'var(--bg-surface)',
       }}
     >
       <div
         style={{
-          borderTop: '1px solid rgba(244, 239, 230, 0.08)',
-          borderBottom: '1px solid rgba(244, 239, 230, 0.08)',
+          borderTop: '1px solid var(--border-subtle)',
+          borderBottom: '1px solid var(--border-subtle)',
           padding: '14px 0',
-          backgroundColor: 'rgba(232, 157, 67, 0.03)',
+          backgroundColor: 'var(--amber-glow)',
           marginBottom: 80,
           overflow: 'hidden',
         }}
@@ -1121,8 +1165,8 @@ function ToolkitSection() {
                 }}
                 style={{
                   borderRadius: 14,
-                  backgroundColor: isOpen ? 'var(--bg-surface)' : 'transparent',
-                  border: `1px solid ${isOpen ? 'rgba(232, 157, 67, 0.3)' : 'rgba(244, 239, 230, 0.08)'}`,
+                  backgroundColor: isOpen ? 'var(--bg-card)' : 'transparent',
+                  border: `1px solid ${isOpen ? 'var(--border-focus)' : 'var(--border-subtle)'}`,
                   padding: '24px 30px',
                   cursor: 'pointer',
                   transition: 'background-color 0.25s ease, border-color 0.25s ease',
@@ -1149,7 +1193,7 @@ function ToolkitSection() {
                 </div>
 
                 {isOpen && (
-                  <div style={{ marginTop: 20, paddingTop: 18, borderTop: '1px solid rgba(244, 239, 230, 0.08)' }}>
+                  <div style={{ marginTop: 20, paddingTop: 18, borderTop: '1px solid var(--border-subtle)' }}>
                     <p className="font-sans" style={{ fontSize: 15, lineHeight: 1.7, color: 'var(--cream-muted)', margin: '0 0 16px 0' }}>
                       {s.desc}
                     </p>
@@ -1159,8 +1203,8 @@ function ToolkitSection() {
                         display: 'inline-block',
                         padding: '6px 14px',
                         borderRadius: 6,
-                        backgroundColor: 'rgba(95, 208, 232, 0.08)',
-                        border: '1px solid rgba(95, 208, 232, 0.2)',
+                        backgroundColor: 'var(--cyan-glow)',
+                        border: '1px solid var(--cyan)',
                         color: 'var(--cyan)',
                         fontSize: 12,
                       }}
@@ -1215,8 +1259,9 @@ function ServicesSection({ onOpenWorkspace }) {
       id="services"
       style={{
         padding: '120px 0',
-        borderBottom: '1px solid rgba(244, 239, 230, 0.08)',
+        borderBottom: '1px solid var(--border-subtle)',
         position: 'relative',
+        backgroundColor: 'var(--bg-screening)',
       }}
     >
       <div style={{ maxWidth: 1340, margin: '0 auto', padding: '0 28px' }}>
@@ -1245,8 +1290,8 @@ function ServicesSection({ onOpenWorkspace }) {
               style={{
                 padding: 32,
                 borderRadius: 14,
-                backgroundColor: 'var(--bg-surface)',
-                border: '1px solid rgba(244, 239, 230, 0.08)',
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-subtle)',
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'space-between',
@@ -1266,7 +1311,7 @@ function ServicesSection({ onOpenWorkspace }) {
                       fontSize: 10,
                       color: 'var(--cream-dim)',
                       letterSpacing: '0.1em',
-                      border: '1px solid rgba(244, 239, 230, 0.1)',
+                      border: '1px solid var(--border-medium)',
                       padding: '3px 8px',
                       borderRadius: 4,
                     }}
@@ -1285,7 +1330,7 @@ function ServicesSection({ onOpenWorkspace }) {
                 style={{
                   marginTop: 28,
                   paddingTop: 18,
-                  borderTop: '1px solid rgba(244, 239, 230, 0.06)',
+                  borderTop: '1px solid var(--border-subtle)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
@@ -1332,8 +1377,9 @@ function ContactSection() {
       id="contact"
       style={{
         padding: '120px 0',
-        borderBottom: '1px solid rgba(244, 239, 230, 0.08)',
+        borderBottom: '1px solid var(--border-subtle)',
         position: 'relative',
+        backgroundColor: 'var(--bg-surface)',
       }}
     >
       <div style={{ maxWidth: 1340, margin: '0 auto', padding: '0 28px' }}>
@@ -1363,8 +1409,8 @@ function ContactSection() {
               <button
                 onClick={copyEmail}
                 style={{
-                  background: 'var(--bg-surface)',
-                  border: '1px solid rgba(232, 157, 67, 0.3)',
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border-focus)',
                   padding: '14px 22px',
                   borderRadius: 10,
                   display: 'inline-flex',
@@ -1403,13 +1449,13 @@ function ContactSection() {
             style={{
               padding: 34,
               borderRadius: 16,
-              backgroundColor: 'var(--bg-surface)',
-              border: '1px solid rgba(244, 239, 230, 0.08)',
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-subtle)',
             }}
           >
             {submitted ? (
               <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                <div style={{ width: 44, height: 44, borderRadius: '50%', backgroundColor: 'rgba(232, 157, 67, 0.1)', border: '1px solid var(--amber)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <div style={{ width: 44, height: 44, borderRadius: '50%', backgroundColor: 'var(--amber-glow)', border: '1px solid var(--amber)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
                   <Check size={22} style={{ color: 'var(--amber)' }} />
                 </div>
                 <h3 className="font-display" style={{ fontSize: 24, color: 'var(--cream-ink)', marginBottom: 8 }}>
@@ -1435,8 +1481,8 @@ function ContactSection() {
                       width: '100%',
                       padding: '12px 16px',
                       borderRadius: 8,
-                      border: '1px solid rgba(244, 239, 230, 0.12)',
-                      backgroundColor: 'rgba(19, 16, 12, 0.6)',
+                      border: '1px solid var(--border-medium)',
+                      backgroundColor: 'var(--bg-screening)',
                       color: 'var(--cream-ink)',
                       fontSize: 14,
                       fontFamily: 'inherit',
@@ -1459,8 +1505,8 @@ function ContactSection() {
                       width: '100%',
                       padding: '12px 16px',
                       borderRadius: 8,
-                      border: '1px solid rgba(244, 239, 230, 0.12)',
-                      backgroundColor: 'rgba(19, 16, 12, 0.6)',
+                      border: '1px solid var(--border-medium)',
+                      backgroundColor: 'var(--bg-screening)',
                       color: 'var(--cream-ink)',
                       fontSize: 14,
                       fontFamily: 'inherit',
@@ -1483,8 +1529,8 @@ function ContactSection() {
                       width: '100%',
                       padding: '12px 16px',
                       borderRadius: 8,
-                      border: '1px solid rgba(244, 239, 230, 0.12)',
-                      backgroundColor: 'rgba(19, 16, 12, 0.6)',
+                      border: '1px solid var(--border-medium)',
+                      backgroundColor: 'var(--bg-screening)',
                       color: 'var(--cream-ink)',
                       fontSize: 14,
                       fontFamily: 'inherit',
@@ -1498,7 +1544,7 @@ function ContactSection() {
                   type="submit"
                   style={{
                     backgroundColor: 'var(--amber)',
-                    color: '#13100c',
+                    color: '#ffffff',
                     border: 'none',
                     padding: '14px',
                     borderRadius: 8,
@@ -1554,8 +1600,8 @@ function FooterSection() {
     <footer
       style={{
         padding: '60px 0 80px',
-        backgroundColor: '#0a0806',
-        borderTop: '1px solid rgba(244, 239, 230, 0.08)',
+        backgroundColor: 'var(--bg-screening)',
+        borderTop: '1px solid var(--border-subtle)',
       }}
     >
       <div
@@ -1583,8 +1629,8 @@ function FooterSection() {
             style={{
               padding: '8px 16px',
               borderRadius: 6,
-              backgroundColor: 'rgba(232, 157, 67, 0.08)',
-              border: '1px solid rgba(232, 157, 67, 0.3)',
+              backgroundColor: 'var(--amber-glow)',
+              border: '1px solid var(--border-focus)',
               color: 'var(--amber)',
               fontSize: 13,
               letterSpacing: '0.12em',
@@ -1597,7 +1643,7 @@ function FooterSection() {
             onClick={scrollToTop}
             style={{
               background: 'transparent',
-              border: '1px solid rgba(244, 239, 230, 0.14)',
+              border: '1px solid var(--border-medium)',
               color: 'var(--cream-ink)',
               padding: '8px 18px',
               borderRadius: 8,
@@ -1617,7 +1663,7 @@ function FooterSection() {
         <div
           className="font-mono"
           style={{
-            borderTop: '1px solid rgba(244, 239, 230, 0.06)',
+            borderTop: '1px solid var(--border-subtle)',
             paddingTop: 24,
             display: 'flex',
             justifyContent: 'space-between',
@@ -1636,7 +1682,7 @@ function FooterSection() {
 }
 
 /* ============================================================
-   LIVE FORENSIC SUITE WORKSPACE (PRESERVED & UPGRADED)
+   LIVE FORENSIC SUITE WORKSPACE (WITH WHITE MODE SUPPORT)
    ============================================================ */
 
 async function analyzeWithSignalScope(file) {
@@ -1724,7 +1770,7 @@ async function analyzeWithSignalScope(file) {
   };
 }
 
-function WorkspaceView({ onClose }) {
+function WorkspaceView({ onClose, theme, onToggleTheme }) {
   const [items, setItems] = useState(PRESEEDED_ITEMS);
   const [activeId, setActiveId] = useState(PRESEEDED_ITEMS[0].id);
   const [reportModalItem, setReportModalItem] = useState(null);
@@ -1769,12 +1815,12 @@ function WorkspaceView({ onClose }) {
     >
       <div
         style={{
-          borderBottom: '1px solid rgba(244, 239, 230, 0.08)',
+          borderBottom: '1px solid var(--border-subtle)',
           padding: '16px 28px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          backgroundColor: 'rgba(19, 16, 12, 0.9)',
+          backgroundColor: 'var(--bg-panel)',
           position: 'sticky',
           top: 0,
           zIndex: 50,
@@ -1789,7 +1835,7 @@ function WorkspaceView({ onClose }) {
             }}
             style={{
               background: 'transparent',
-              border: '1px solid rgba(244, 239, 230, 0.15)',
+              border: '1px solid var(--border-medium)',
               color: 'var(--amber)',
               padding: '6px 14px',
               borderRadius: 6,
@@ -1809,14 +1855,15 @@ function WorkspaceView({ onClose }) {
           </span>
         </div>
 
-        <div style={{ display: 'flex', gap: 12 }}>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <ThemeToggle theme={theme} onToggle={onToggleTheme} />
           <button
             onClick={() => setReportModalItem(activeItem)}
             style={{
-              backgroundColor: 'rgba(232, 157, 67, 0.1)',
+              backgroundColor: 'var(--amber-glow)',
               border: '1px solid var(--amber)',
               color: 'var(--amber)',
-              padding: '6px 14px',
+              padding: '7px 14px',
               borderRadius: 6,
               fontSize: 12.5,
               cursor: 'pointer',
@@ -1836,8 +1883,8 @@ function WorkspaceView({ onClose }) {
           style={{
             padding: 24,
             borderRadius: 14,
-            backgroundColor: 'var(--bg-surface)',
-            border: '1px solid rgba(244, 239, 230, 0.08)',
+            backgroundColor: 'var(--bg-card)',
+            border: '1px solid var(--border-subtle)',
             marginBottom: 28,
             display: 'flex',
             justifyContent: 'space-between',
@@ -1859,7 +1906,7 @@ function WorkspaceView({ onClose }) {
             <label
               style={{
                 backgroundColor: 'var(--amber)',
-                color: '#13100c',
+                color: '#ffffff',
                 padding: '10px 20px',
                 borderRadius: 8,
                 fontSize: 13.5,
@@ -1882,8 +1929,8 @@ function WorkspaceView({ onClose }) {
             style={{
               padding: 20,
               borderRadius: 14,
-              backgroundColor: 'var(--bg-surface)',
-              border: '1px solid rgba(244, 239, 230, 0.08)',
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-subtle)',
               height: 'fit-content',
             }}
           >
@@ -1903,8 +1950,8 @@ function WorkspaceView({ onClose }) {
                     style={{
                       padding: 12,
                       borderRadius: 8,
-                      backgroundColor: isSelected ? 'rgba(232, 157, 67, 0.08)' : 'rgba(244, 239, 230, 0.02)',
-                      border: `1px solid ${isSelected ? 'var(--amber)' : 'rgba(244, 239, 230, 0.06)'}`,
+                      backgroundColor: isSelected ? 'var(--amber-glow)' : 'transparent',
+                      border: `1px solid ${isSelected ? 'var(--amber)' : 'var(--border-subtle)'}`,
                       cursor: 'pointer',
                       display: 'flex',
                       gap: 12,
@@ -1932,8 +1979,8 @@ function WorkspaceView({ onClose }) {
               style={{
                 padding: 30,
                 borderRadius: 14,
-                backgroundColor: 'var(--bg-surface)',
-                border: '1px solid rgba(244, 239, 230, 0.08)',
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-subtle)',
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
@@ -1945,7 +1992,7 @@ function WorkspaceView({ onClose }) {
                       fontSize: 11,
                       padding: '4px 10px',
                       borderRadius: 4,
-                      backgroundColor: activeItem.isAI ? 'rgba(232, 157, 67, 0.15)' : 'rgba(95, 208, 232, 0.15)',
+                      backgroundColor: activeItem.isAI ? 'var(--amber-glow)' : 'var(--cyan-glow)',
                       color: activeItem.isAI ? 'var(--amber)' : 'var(--cyan)',
                       border: `1px solid ${activeItem.isAI ? 'var(--amber)' : 'var(--cyan)'}`,
                       marginBottom: 10,
@@ -1970,9 +2017,9 @@ function WorkspaceView({ onClose }) {
                   maxHeight: 380,
                   borderRadius: 10,
                   overflow: 'hidden',
-                  border: '1px solid rgba(244, 239, 230, 0.1)',
+                  border: '1px solid var(--border-subtle)',
                   marginBottom: 24,
-                  backgroundColor: '#0c0a08',
+                  backgroundColor: 'var(--bg-screening)',
                 }}
               >
                 <img
@@ -1982,7 +2029,7 @@ function WorkspaceView({ onClose }) {
                 />
               </div>
 
-              <div style={{ padding: 20, borderRadius: 10, backgroundColor: 'rgba(244, 239, 230, 0.03)', border: '1px solid rgba(244, 239, 230, 0.08)', marginBottom: 24 }}>
+              <div style={{ padding: 20, borderRadius: 10, backgroundColor: 'var(--bg-screening)', border: '1px solid var(--border-subtle)', marginBottom: 24 }}>
                 <div className="font-mono" style={{ fontSize: 11, color: 'var(--amber)', letterSpacing: '0.1em', marginBottom: 6 }}>
                   PLAIN-LANGUAGE FORENSIC REASONING
                 </div>
@@ -1992,7 +2039,7 @@ function WorkspaceView({ onClose }) {
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-                <div style={{ padding: 18, borderRadius: 10, backgroundColor: 'rgba(244, 239, 230, 0.02)', border: '1px solid rgba(244, 239, 230, 0.06)' }}>
+                <div style={{ padding: 18, borderRadius: 10, backgroundColor: 'var(--bg-screening)', border: '1px solid var(--border-subtle)' }}>
                   <div className="font-mono" style={{ fontSize: 11, color: 'var(--cream-dim)', marginBottom: 10 }}>
                     PROVENANCE RECORD
                   </div>
@@ -2003,7 +2050,7 @@ function WorkspaceView({ onClose }) {
                   </div>
                 </div>
 
-                <div style={{ padding: 18, borderRadius: 10, backgroundColor: 'rgba(244, 239, 230, 0.02)', border: '1px solid rgba(244, 239, 230, 0.06)' }}>
+                <div style={{ padding: 18, borderRadius: 10, backgroundColor: 'var(--bg-screening)', border: '1px solid var(--border-subtle)' }}>
                   <div className="font-mono" style={{ fontSize: 11, color: 'var(--cream-dim)', marginBottom: 10 }}>
                     RE-COMPRESSION STABILITY
                   </div>
@@ -2024,7 +2071,7 @@ function WorkspaceView({ onClose }) {
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
             zIndex: 1000,
             display: 'flex',
             alignItems: 'center',
@@ -2036,13 +2083,13 @@ function WorkspaceView({ onClose }) {
             style={{
               maxWidth: 680,
               width: '100%',
-              backgroundColor: 'var(--bg-surface)',
+              backgroundColor: 'var(--bg-card)',
               border: '1px solid var(--amber)',
               borderRadius: 14,
               padding: 32,
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, borderBottom: '1px solid rgba(244, 239, 230, 0.1)', paddingBottom: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, borderBottom: '1px solid var(--border-subtle)', paddingBottom: 14 }}>
               <div className="font-display" style={{ fontSize: 20, color: 'var(--cream-ink)' }}>
                 Certified Forensic Dossier
               </div>
@@ -2051,7 +2098,7 @@ function WorkspaceView({ onClose }) {
                   onClick={() => window.print()}
                   style={{
                     backgroundColor: 'var(--amber)',
-                    color: '#13100c',
+                    color: '#ffffff',
                     border: 'none',
                     padding: '6px 14px',
                     borderRadius: 6,
@@ -2066,7 +2113,7 @@ function WorkspaceView({ onClose }) {
                   onClick={() => setReportModalItem(null)}
                   style={{
                     background: 'transparent',
-                    border: '1px solid rgba(244, 239, 230, 0.2)',
+                    border: '1px solid var(--border-medium)',
                     color: 'var(--cream-ink)',
                     padding: '6px 12px',
                     borderRadius: 6,
@@ -2093,7 +2140,7 @@ function WorkspaceView({ onClose }) {
               {reportModalItem.explanation}
             </p>
 
-            <div className="font-mono" style={{ fontSize: 11, color: 'var(--cream-dim)', borderTop: '1px solid rgba(244, 239, 230, 0.08)', paddingTop: 14 }}>
+            <div className="font-mono" style={{ fontSize: 11, color: 'var(--cream-dim)', borderTop: '1px solid var(--border-subtle)', paddingTop: 14 }}>
               SHA-256 HASH: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
             </div>
           </div>
@@ -2109,9 +2156,14 @@ function WorkspaceView({ onClose }) {
 
 export default function App() {
   const [view, setView] = useState('landing');
+  const [theme, setTheme] = useState('dark'); // 'dark' | 'light' (White Mode)
   const [activeSection, setActiveSection] = useState('01');
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [gridEnabled, setGridEnabled] = useState(true);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
 
   useEffect(() => {
     if (view !== 'landing') return;
@@ -2153,7 +2205,17 @@ export default function App() {
   };
 
   return (
-    <div style={{ position: 'relative', width: '100%', minHeight: '100vh', backgroundColor: 'var(--bg-screening)' }}>
+    <div
+      className={theme === 'light' ? 'theme-light' : ''}
+      style={{
+        position: 'relative',
+        width: '100%',
+        minHeight: '100vh',
+        backgroundColor: 'var(--bg-screening)',
+        color: 'var(--cream-ink)',
+        transition: 'background-color 0.3s ease, color 0.3s ease',
+      }}
+    >
       <MagneticCursor />
       {gridEnabled && <div className="cinema-grid-overlay" />}
       <Curtain onComplete={() => soundEngine.playReveal()} />
@@ -2166,6 +2228,8 @@ export default function App() {
             onToggleSound={toggleSound}
             gridEnabled={gridEnabled}
             onToggleGrid={toggleGrid}
+            theme={theme}
+            onToggleTheme={toggleTheme}
             onOpenWorkspace={() => setView('workspace')}
           />
           <main>
@@ -2179,7 +2243,11 @@ export default function App() {
           <FooterSection />
         </>
       ) : (
-        <WorkspaceView onClose={() => setView('landing')} />
+        <WorkspaceView
+          onClose={() => setView('landing')}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+        />
       )}
     </div>
   );
