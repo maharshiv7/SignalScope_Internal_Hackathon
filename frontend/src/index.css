@@ -21,6 +21,8 @@
   --amber-glow: rgba(232, 157, 67, 0.18);
   --cyan: #5FD0E8;
   --cyan-glow: rgba(95, 208, 232, 0.15);
+  --violet-provenance: #a855f7;
+  --violet-glow: rgba(168, 85, 247, 0.16);
 }
 
 .theme-light {
@@ -41,6 +43,8 @@
   --amber-glow: rgba(217, 119, 6, 0.12);
   --cyan: #0284c7;
   --cyan-glow: rgba(2, 132, 199, 0.1);
+  --violet-provenance: #7c3aed;
+  --violet-glow: rgba(124, 58, 237, 0.12);
 }
 
 *, *::before, *::after {
@@ -163,6 +167,82 @@ body {
   background: var(--amber);
 }
 
+/* Toast Slide & Fade */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Confidence Fill Animation (600ms compute simulation) */
+@keyframes fillBar {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.animate-fill-bar {
+  transform-origin: left;
+  animation: fillBar 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Brief Micro-Feedback Highlight Pulse when verdict/score shifts */
+@keyframes pulseHighlight {
+  0% {
+    background-color: var(--amber-glow);
+    box-shadow: 0 0 0 2px var(--amber);
+  }
+  50% {
+    background-color: rgba(232, 157, 67, 0.3);
+    box-shadow: 0 0 12px var(--amber);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: none;
+  }
+}
+
+.pulse-highlight {
+  animation: pulseHighlight 0.75s ease-out;
+}
+
+/* Spinner Animation */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Print Styles for Forensic Dossier Export */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  header, nav, .cinema-grid-overlay, .ambient-hero-glow, button {
+    display: none !important;
+  }
+  .print-dossier {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: 1px solid #ddd !important;
+  }
+}
+
 /* Reduced Motion Override per Brief */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -179,3 +259,4 @@ body {
     animation: none;
   }
 }
+
