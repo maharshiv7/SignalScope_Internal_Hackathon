@@ -2151,6 +2151,8 @@ async function analyzeWithSignalScope(file) {
     if (response.ok) {
       const data = await response.json();
       const metadata = data.metadata_evidence || {};
+      const robustness = data.robustness || {};
+      const gradcam = data.gradcam || {};
       const aiProbability = Number(data.ai_generated_probability || 0);
       const confidence = Math.round(Number(data.confidence || 0) * 100);
 
@@ -2170,7 +2172,10 @@ async function analyzeWithSignalScope(file) {
           : `Visual-model AI likelihood: ${(aiProbability * 100).toFixed(1)}%. ${evidence}`;
 
       const isAIGenerated = data.verdict === 'likely_ai_generated';
-      const preciseConfidence = Number((aiProbability > 0 ? (aiProbability * 100) : confidence + 0.3).toFixed(1));
+      const preciseConfidence = Number((confidence || 0).toFixed(1));
+      const confidenceForVerdict = (probability) => Math.round(
+        (isAIGenerated ? Number(probability) : 1 - Number(probability)) * 100
+      );
       const generatorFingerprints = isAIGenerated
         ? {
             flux: Math.min(95, Math.round(confidence * 0.95)),
@@ -2192,6 +2197,10 @@ async function analyzeWithSignalScope(file) {
         preciseConfidence,
         status: 'done',
         explanation,
+        gradcamOverlay: gradcam.overlay_png_base64
+          ? `data:image/png;base64,${gradcam.overlay_png_base64}`
+          : null,
+        gradcamTarget: gradcam.target_class || null,
         generatorFingerprints,
         heatSpots: [
           { x: 44, y: 36, r: 10, label: 'Visual inference centroid' }
@@ -2199,14 +2208,23 @@ async function analyzeWithSignalScope(file) {
         metadata: {
           camera: [metadata.camera_make, metadata.camera_model].filter(Boolean).join(' ') || 'Not detected',
           timestamp: metadata.date_taken || 'Not present',
-          editor: 'FastAPI Backend Engine',
-          c2pa: metadata.c2pa_hint_present ? 'C2PA hint detected' : 'No C2PA credentials',
+          editor: metadata.note || 'Not evaluated',
+          c2pa: metadata.c2pa_hint_present ? 'C2PA byte hint detected' : 'No C2PA byte hint detected',
         },
-        robustness: { original: confidence, compressed: Math.max(0, confidence - 4) },
+        robustness: {
+          original: confidenceForVerdict(robustness.original_ai_probability ?? aiProbability),
+          compressed: robustness.social_media_ai_probability === undefined
+            ? null
+            : confidenceForVerdict(robustness.social_media_ai_probability),
+          condition: robustness.condition || 'Not available',
+          probabilityDelta: Number(robustness.probability_delta ?? 0),
+        },
       };
     }
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || 'SignalScope analysis failed.');
   } catch (err) {
-    console.warn('Live API unavailable, using calibrated in-memory engine fallback:', err);
+    throw new Error(err.message || 'Could not reach the SignalScope backend.');
   }
 
   const isAI = safeSeed % 2 === 0;
@@ -3039,11 +3057,26 @@ function WorkspaceView({
       setItems((prev) => [pendingItem, ...prev]);
       setActiveId(pendingId);
 
-      const result = await analyzeWithSignalScope(f);
-      soundEngine.playReveal();
-      setItems((prev) =>
-        prev.map((it) => (it.id === pendingId ? { ...result, id: pendingId } : it))
-      );
+      try {
+        const result = await analyzeWithSignalScope(f);
+        soundEngine.playReveal();
+        setItems((prev) =>
+          prev.map((it) => (it.id === pendingId ? { ...result, id: pendingId } : it))
+        );
+      } catch (error) {
+        setItems((prev) => prev.map((it) => (
+          it.id === pendingId
+            ? {
+                ...it,
+                status: 'error',
+                verdict: 'Analysis failed',
+                confidence: 0,
+                preciseConfidence: 0,
+                explanation: error.message || 'The backend did not return an analysis result.',
+              }
+            : it
+        )));
+      }
     }
   };
 
@@ -3836,21 +3869,46 @@ function WorkspaceView({
                       <div className={`forensic-laser ${activeItem.isAI ? 'laser-amber' : ''}`} />
                     )}
 
-                    {/* Inspection Exhibit Image */}
-                    <img
-                      src={activeItem.url}
-                      alt="Inspection exhibit"
+                    {/* Inspection exhibit with backend-generated Grad-CAM overlay */}
+                    <div
                       style={{
+                        position: 'relative',
+                        display: 'inline-flex',
                         maxHeight: 440,
                         maxWidth: '92%',
-                        objectFit: 'contain',
-                        borderRadius: 6,
-                        boxShadow: '0 16px 40px rgba(0,0,0,0.6)',
                         transform: `scale(${zoomLevel})`,
-                        transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), filter 0.25s ease',
-                        ...getFilterStyle(),
+                        transition: 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
                       }}
-                    />
+                    >
+                      <img
+                        src={activeItem.url}
+                        alt="Inspection exhibit"
+                        style={{
+                          maxHeight: 440,
+                          maxWidth: '100%',
+                          objectFit: 'contain',
+                          borderRadius: 6,
+                          boxShadow: '0 16px 40px rgba(0,0,0,0.6)',
+                          transition: 'filter 0.25s ease',
+                          ...getFilterStyle(),
+                        }}
+                      />
+                      {viewportFilter === 'heatmap' && activeItem.gradcamOverlay && (
+                        <img
+                          src={activeItem.gradcamOverlay}
+                          alt={`Grad-CAM attribution for ${activeItem.gradcamTarget || 'the predicted class'}`}
+                          style={{
+                            position: 'absolute',
+                            inset: 0,
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'fill',
+                            borderRadius: 6,
+                            pointerEvents: 'none',
+                          }}
+                        />
+                      )}
+                    </div>
 
                     {/* Analyzing Overlay with Spinner */}
                     {activeItem.status === 'analyzing' && (
@@ -3886,29 +3944,6 @@ function WorkspaceView({
                         </div>
                       </div>
                     )}
-
-                    {/* Focal Heat Spots (Visible in heatmap and optical mode) */}
-                    {(viewportFilter === 'heatmap' || viewportFilter === 'optical') &&
-                      activeItem.heatSpots?.map((spot, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            position: 'absolute',
-                            left: `${spot.x}%`,
-                            top: `${spot.y}%`,
-                            transform: 'translate(-50%, -50%)',
-                            width: spot.r * 2.6,
-                            height: spot.r * 2.6,
-                            borderRadius: '50%',
-                            border: `2px dashed ${activeItem.isAI ? 'var(--amber)' : 'var(--cyan)'}`,
-                            backgroundColor: activeItem.isAI ? 'rgba(232, 157, 67, 0.28)' : 'rgba(95, 208, 232, 0.28)',
-                            pointerEvents: 'none',
-                            zIndex: 7,
-                            boxShadow: `0 0 12px ${activeItem.isAI ? 'var(--amber)' : 'var(--cyan)'}`,
-                          }}
-                          title={spot.label}
-                        />
-                      ))}
 
                     {/* Bottom HUD Telemetry Overlay */}
                     <div
@@ -4014,7 +4049,8 @@ function WorkspaceView({
                       <div className="font-sans" style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 7 }}>
                         <div><span style={{ color: 'var(--cream-dim)' }}>Original Confidence:</span> <span className="font-mono" style={{ color: 'var(--cream-ink)', fontWeight: 600 }}>{activeItem.robustness?.original}%</span></div>
                         <div><span style={{ color: 'var(--cream-dim)' }}>Post-Compression:</span> <span className="font-mono" style={{ color: 'var(--cream-ink)', fontWeight: 600 }}>{activeItem.robustness?.compressed ?? 'N/A'}%</span></div>
-                        <div><span style={{ color: 'var(--cream-dim)' }}>Social Audit:</span> <span style={{ color: 'var(--cream-ink)' }}>Resilient to JPEG/WebP quantization</span></div>
+                        <div><span style={{ color: 'var(--cream-dim)' }}>Test condition:</span> <span style={{ color: 'var(--cream-ink)' }}>{activeItem.robustness?.condition || 'Not available'}</span></div>
+                        <div><span style={{ color: 'var(--cream-dim)' }}>AI probability change:</span> <span className="font-mono" style={{ color: 'var(--cream-ink)', fontWeight: 600 }}>{Number(activeItem.robustness?.probabilityDelta ?? 0).toFixed(3)}</span></div>
                       </div>
                     </div>
                   </div>
