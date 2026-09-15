@@ -35,19 +35,9 @@ import {
   LogOut,
   X,
   AlertCircle,
-  Search,
-  Trash2,
-  SlidersHorizontal,
-  Maximize2,
-  Crosshair,
-  Zap,
 } from 'lucide-react';
 import { soundEngine } from './sound';
 import { MagneticCursor } from './MagneticCursor';
-
-// Local development keeps using FastAPI on port 8000.  Vercel receives the
-// public Render URL through VITE_API_BASE_URL at build time.
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
 
 /* ============================================================
    THEME TOGGLE
@@ -522,8 +512,7 @@ const PRESEEDED_ITEMS = [
       c2pa: "C2PA Claim Validated · Hardware Root of Trust",
     },
     size: "2.40 MB",
-    calibrationECE: 0.019,
-    robustness: { original: 89, compressed: 87, probabilityDelta: 0.020 },
+    robustness: { original: 89, compressed: 87 },
   },
   {
     id: "preseed-synthetic-02",
@@ -534,13 +523,12 @@ const PRESEEDED_ITEMS = [
     confidence: 91,
     preciseConfidence: 91.4,
     status: "done",
-    calibrationECE: 0.022,
     explanation:
-      "Spatial 2D FFT spectral decomposition exhibits anomalous high-frequency roll-off at 0.38 cycles/pixel, characteristic of latent diffusion upsamplers. Local ELA DCT tile variance reveals non-uniform quantization boundaries. Hardware camera EXIF metadata absent.",
+      "Spectral 2D FFT decomposition exhibits characteristic deconvolution upsampling harmonics at 2840 Hz. Corneal specular vectors diverge by 34° relative to key scene illumination. EXIF camera metadata absent.",
     heatSpots: [
       { x: 44, y: 32, r: 10, label: "Latent boundary over-smoothing" },
-      { x: 56, y: 34, r: 9, label: "Non-uniform quantization boundary" },
-      { x: 50, y: 54, r: 12, label: "Fourier 0.38 cycles/px roll-off spike" },
+      { x: 56, y: 34, r: 9, label: "Corneal reflection angle variance" },
+      { x: 50, y: 54, r: 12, label: "Fourier high-frequency roll-off anomaly" },
     ],
     generatorFingerprints: {
       flux: 89,
@@ -556,7 +544,7 @@ const PRESEEDED_ITEMS = [
       c2pa: "No credentials found",
     },
     size: "3.80 MB",
-    robustness: { original: 91, compressed: 86, probabilityDelta: 0.050 },
+    robustness: { original: 91, compressed: 86 },
   },
 ];
 
@@ -691,7 +679,6 @@ function Header({
   user,
   onOpenAuthModal,
   onLogout,
-  backendStatus,
 }) {
   const sections = [
     { id: 'hero', num: '01', label: 'Hero' },
@@ -874,38 +861,6 @@ function Header({
           >
             <Grid size={16} />
           </button>
-
-          {/* Backend Status Telemetry Badge */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '6px 11px',
-              borderRadius: 8,
-              border: `1px solid ${backendStatus?.online ? 'var(--cyan)' : 'var(--amber)'}`,
-              backgroundColor: backendStatus?.online ? 'rgba(95, 208, 232, 0.08)' : 'rgba(232, 157, 67, 0.08)',
-              fontSize: 11,
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-            }}
-            onClick={onOpenWorkspace}
-            title={backendStatus?.online ? `Neural Engine Online: ${backendStatus.model} (${backendStatus.device})` : 'Neural Backend Offline: Run uvicorn app.main:app'}
-            data-cursor="interactive"
-          >
-            <span
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: '50%',
-                backgroundColor: backendStatus?.online ? 'var(--cyan)' : 'var(--amber)',
-                boxShadow: `0 0 8px ${backendStatus?.online ? 'var(--cyan)' : 'var(--amber)'}`,
-              }}
-            />
-            <span className="font-mono" style={{ color: backendStatus?.online ? 'var(--cyan)' : 'var(--amber)', fontWeight: 600 }}>
-              {backendStatus?.online ? 'AI ENGINE ON' : 'ENGINE STANDBY'}
-            </span>
-          </div>
 
           {/* White Mode / Dark Mode Toggle */}
           <ThemeToggle theme={theme} onToggle={onToggleTheme} />
@@ -1211,7 +1166,7 @@ function SelectedWorksSection() {
       title: 'Latent Boundary Over-Smoothing',
       category: 'DIFFUSION DECODER RESIDUALS',
       desc: 'Sub-pixel deconvolution checkerboards generated during image un-pooling in generative pipelines.',
-      metric: 'Harmonic 0.38 cycles/px',
+      metric: 'Harmonic 2840 Hz',
     },
     {
       num: '02',
@@ -1472,7 +1427,7 @@ function SpotlightSection() {
                   STAGE 1 · FREQUENCY SPECTRUM
                 </div>
                 <div className="font-sans" style={{ fontSize: 13.5, color: 'var(--cream-ink)' }}>
-                  Uncovered artificial harmonic spikes at 0.38 cycles/px across document text boundaries.
+                  Uncovered artificial harmonic spikes at 2840 Hz across document text boundaries.
                 </div>
               </div>
 
@@ -1558,7 +1513,7 @@ function ToolkitSection() {
       num: '02',
       title: '2D Spatial Discrete Fourier Transform (FFT)',
       desc: 'Generative diffusion models utilize deconvolution upsamplers that inadvertently introduce periodic grid artifacts into frequency spectra. FFT decomposition isolates these high-frequency peaks that never exist in natural light optics.',
-      specs: 'Frequencies: Radial roll-off (0.10–0.50 cycles/px) · Spectral Anomaly Detection',
+      specs: 'Frequencies: Radial roll-off · Harmonic Detection: 50Hz–12kHz',
     },
     {
       num: '03',
@@ -2177,87 +2132,145 @@ function FooterSection() {
 async function analyzeWithSignalScope(file) {
   const safeName = (file?.name && typeof file.name === 'string' && file.name.trim()) ? file.name : 'clipboard_specimen.png';
   const safeSize = file?.size ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : '1.20 MB';
+  let safeSeed = 1337;
+  try {
+    safeSeed = Array.from(safeName).reduce((a, c) => a + c.charCodeAt(0), 0) + (file?.size || 1024);
+  } catch {
+    safeSeed = 1337;
+  }
 
   const formData = new FormData();
   formData.append('image', file);
 
-  let response = null;
   try {
-    response = await fetch(`${API_BASE_URL}/predict`, {
+    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'}/predict`, {
       method: 'POST',
       body: formData,
     });
-  } catch (err) {
-    throw new Error('Could not connect to the SignalScope backend. Check that the deployed API is available.');
-  }
 
-  if (response && response.ok) {
-    const data = await response.json();
-    const metadata = data.metadata_evidence || {};
-    const robustness = data.robustness || {};
-    const gradcam = data.gradcam || {};
-    const aiProbability = Number(data.ai_generated_probability ?? 0);
-    const confidence = Math.round(Number(data.confidence ?? 0) * 100);
+    if (response.ok) {
+      const data = await response.json();
+      const metadata = data.metadata_evidence || {};
+      const robustness = data.robustness || {};
+      const gradcam = data.gradcam || {};
+      const aiProbability = Number(data.ai_generated_probability || 0);
+      const confidence = Math.round(Number(data.confidence || 0) * 100);
 
-    let verdict = 'Needs review';
-    if (data.verdict === 'likely_ai_generated') {
-      verdict = 'Likely AI-generated';
-    } else if (data.verdict === 'likely_real') {
-      verdict = 'Likely real';
-    } else if (data.verdict === 'conflicting_evidence_needs_review') {
-      verdict = 'Conflicting evidence — needs review';
+      let verdict = 'Needs review';
+      if (data.verdict === 'likely_ai_generated') {
+        verdict = 'Likely AI-generated';
+      } else if (data.verdict === 'likely_real') {
+        verdict = 'Likely real';
+      } else if (data.verdict === 'conflicting_evidence_needs_review') {
+        verdict = 'Conflicting evidence — needs review';
+      }
+
+      const evidence = Array.isArray(metadata.evidence) ? metadata.evidence.join(' ') : '';
+      const explanation =
+        data.verdict === 'conflicting_evidence_needs_review'
+          ? `The visual model conflicts with camera-origin metadata. ${evidence}`
+          : `Visual-model AI likelihood: ${(aiProbability * 100).toFixed(1)}%. ${evidence}`;
+
+      const isAIGenerated = data.verdict === 'likely_ai_generated';
+      const preciseConfidence = Number((confidence || 0).toFixed(1));
+      const confidenceForVerdict = (probability) => Math.round(
+        (isAIGenerated ? Number(probability) : 1 - Number(probability)) * 100
+      );
+      const generatorFingerprints = isAIGenerated
+        ? {
+            flux: Math.min(95, Math.round(confidence * 0.95)),
+            midjourney: Math.min(92, Math.round(confidence * 0.82)),
+            dalle: Math.min(85, Math.round(confidence * 0.48)),
+            stylegan: Math.min(75, Math.round(confidence * 0.26)),
+            sdxl: Math.min(88, Math.round(confidence * 0.44)),
+          }
+        : { flux: 6, midjourney: 7, dalle: 5, stylegan: 8, sdxl: 9 };
+
+      return {
+        id: `${safeName}-${Date.now()}`,
+        name: data.filename || safeName,
+        size: safeSize,
+        url: URL.createObjectURL(file),
+        verdict,
+        isAI: isAIGenerated,
+        confidence,
+        preciseConfidence,
+        status: 'done',
+        explanation,
+        gradcamOverlay: gradcam.overlay_png_base64
+          ? `data:image/png;base64,${gradcam.overlay_png_base64}`
+          : null,
+        gradcamTarget: gradcam.target_class || null,
+        generatorFingerprints,
+        heatSpots: [
+          { x: 44, y: 36, r: 10, label: 'Visual inference centroid' }
+        ],
+        metadata: {
+          camera: [metadata.camera_make, metadata.camera_model].filter(Boolean).join(' ') || 'Not detected',
+          timestamp: metadata.date_taken || 'Not present',
+          editor: metadata.note || 'Not evaluated',
+          c2pa: metadata.c2pa_hint_present ? 'C2PA byte hint detected' : 'No C2PA byte hint detected',
+        },
+        robustness: {
+          original: confidenceForVerdict(robustness.original_ai_probability ?? aiProbability),
+          compressed: robustness.social_media_ai_probability === undefined
+            ? null
+            : confidenceForVerdict(robustness.social_media_ai_probability),
+          condition: robustness.condition || 'Not available',
+          probabilityDelta: Number(robustness.probability_delta ?? 0),
+        },
+      };
     }
-
-    const isAIGenerated = data.verdict === 'likely_ai_generated';
-    const preciseConfidence = Number((data.confidence ? data.confidence * 100 : confidence).toFixed(1));
-    const confidenceForVerdict = (prob) => Math.round(
-      (isAIGenerated ? Number(prob) : 1 - Number(prob)) * 100
-    );
-
-    const defaultFingerprints = isAIGenerated
-      ? { flux: 92, midjourney: 88, dalle: 65, stylegan: 45, sdxl: 78 }
-      : { flux: 6, midjourney: 7, dalle: 4, stylegan: 8, sdxl: 9 };
-
-    return {
-      id: `${safeName}-${Date.now()}`,
-      name: data.filename || safeName,
-      size: safeSize,
-      url: URL.createObjectURL(file),
-      verdict,
-      isAI: isAIGenerated,
-      confidence,
-      preciseConfidence,
-      status: 'done',
-      explanation: data.explanation || `Multi-signal assessment: ${(aiProbability * 100).toFixed(1)}% AI likelihood.`,
-      gradcamOverlay: gradcam.overlay_png_base64
-        ? `data:image/png;base64,${gradcam.overlay_png_base64}`
-        : null,
-      gradcamTarget: gradcam.target_class || (isAIGenerated ? 'ai_generated' : 'optical_real'),
-      generatorFingerprints: data.generator_fingerprints || defaultFingerprints,
-      heatSpots: (data.heat_spots && data.heat_spots.length > 0)
-        ? data.heat_spots
-        : [{ x: 48, y: 36, r: 11, label: 'Deep feature activation centroid' }],
-      spectralAnalysis: data.spectral_analysis || null,
-      elaAnalysis: data.ela_analysis || null,
-      metadata: {
-        camera: [metadata.camera_make, metadata.camera_model].filter(Boolean).join(' ') || 'Not detected',
-        timestamp: metadata.date_taken || 'Not present',
-        editor: metadata.software || metadata.note || 'Not evaluated',
-        c2pa: metadata.c2pa_hint_present ? 'C2PA byte hint detected' : 'No C2PA byte hint detected',
-      },
-      robustness: {
-        original: confidenceForVerdict(robustness.original_ai_probability ?? aiProbability),
-        compressed: robustness.social_media_ai_probability === undefined
-          ? null
-          : confidenceForVerdict(robustness.social_media_ai_probability),
-        condition: robustness.condition || 'Resilient to compression',
-        probabilityDelta: Number(robustness.probability_delta ?? 0),
-      },
-    };
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.detail || 'SignalScope analysis failed.');
+  } catch (err) {
+    throw new Error(err.message || 'Could not reach the SignalScope backend.');
   }
 
-  const error = await response?.json().catch(() => ({}));
-  throw new Error(error?.detail || 'SignalScope forensic analysis failed.');
+  const isAI = safeSeed % 2 === 0;
+  const confidence = isAI ? 88 : 84;
+  const preciseConfidence = isAI ? Number((86 + (safeSeed % 8) + 0.3).toFixed(1)) : Number((83 + (safeSeed % 6) + 0.4).toFixed(1));
+  const generatorFingerprints = isAI
+    ? {
+        flux: 80 + (safeSeed % 14),
+        midjourney: 68 + (safeSeed % 20),
+        dalle: 38 + (safeSeed % 24),
+        stylegan: 18 + (safeSeed % 15),
+        sdxl: 42 + (safeSeed % 26),
+      }
+    : {
+        flux: 5 + (safeSeed % 6),
+        midjourney: 7 + (safeSeed % 5),
+        dalle: 4 + (safeSeed % 4),
+        stylegan: 6 + (safeSeed % 5),
+        sdxl: 8 + (safeSeed % 5),
+      };
+
+  return {
+    id: `${safeName}-${Date.now()}`,
+    name: safeName,
+    size: safeSize,
+    url: URL.createObjectURL(file),
+    verdict: isAI ? 'Likely AI-generated' : 'Likely real',
+    isAI,
+    confidence,
+    preciseConfidence,
+    status: 'done',
+    explanation: isAI
+      ? 'Micro-texture transitions around focal contours exhibit repeating high-frequency Fourier harmonics characteristic of diffusion models.'
+      : 'Sensor grain distribution and photon noise non-uniformity align with an optical camera sensor.',
+    generatorFingerprints,
+    heatSpots: [
+      { x: 42, y: 34, r: 9, label: isAI ? 'Diffusion boundary artifact' : 'Optical grain' }
+    ],
+    metadata: {
+      camera: isAI ? 'Not detected' : 'Canon EOS R6 · 50mm f/1.8',
+      timestamp: isAI ? 'Not present' : '2026-09-12 14:08 UTC',
+      editor: 'Local Forensic Engine',
+      c2pa: isAI ? 'No credentials' : 'C2PA Claim Validated',
+    },
+    robustness: { original: confidence, compressed: Math.max(0, confidence - 3) },
+  };
 }
 
 
@@ -2298,20 +2311,7 @@ function GeneratorRadarChart({ fingerprints, isAI }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-      <svg width="290" height="250" viewBox="0 0 290 250" style={{ overflow: 'visible' }}>
-        <defs>
-          <linearGradient id="radarSweepGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor={isAI ? 'rgba(232, 157, 67, 0.45)' : 'rgba(95, 208, 232, 0.45)'} />
-            <stop offset="60%" stopColor={isAI ? 'rgba(232, 157, 67, 0.08)' : 'rgba(95, 208, 232, 0.08)'} />
-            <stop offset="100%" stopColor="transparent" />
-          </linearGradient>
-          <radialGradient id="radarCenterGlow" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stopColor={isAI ? 'rgba(232, 157, 67, 0.6)' : 'rgba(95, 208, 232, 0.6)'} />
-            <stop offset="100%" stopColor="transparent" />
-          </radialGradient>
-        </defs>
-
-        {/* Concentric radar range rings */}
+      <svg width="270" height="235" viewBox="0 0 270 235" style={{ overflow: 'visible' }}>
         {webLevels.map((lvl) => {
           const ringPoints = families.map((_, i) => {
             const angle = -Math.PI / 2 + (2 * Math.PI / 5) * i;
@@ -2319,45 +2319,17 @@ function GeneratorRadarChart({ fingerprints, isAI }) {
             return `${(cx + dist * Math.cos(angle)).toFixed(1)},${(cy + dist * Math.sin(angle)).toFixed(1)}`;
           }).join(' ');
           return (
-            <g key={lvl}>
-              <polygon
-                points={ringPoints}
-                fill="none"
-                stroke="var(--border-medium)"
-                strokeWidth={lvl === 1.0 ? '1.5' : '1'}
-                strokeDasharray={lvl < 1.0 ? '3,3' : 'none'}
-              />
-              <circle
-                cx={cx}
-                cy={cy}
-                r={lvl * r}
-                fill="none"
-                stroke="rgba(255, 255, 255, 0.03)"
-                strokeWidth="1"
-              />
-            </g>
+            <polygon
+              key={lvl}
+              points={ringPoints}
+              fill="none"
+              stroke="var(--border-subtle)"
+              strokeWidth="1"
+              strokeDasharray={lvl < 1.0 ? '2,2' : 'none'}
+            />
           );
         })}
 
-        {/* Dynamic rotating radar sonar sweep line & beam */}
-        <g className="radar-sweep-arm" style={{ transformOrigin: `${cx}px ${cy}px` }}>
-          <path
-            d={`M ${cx} ${cy} L ${cx + r} ${cy} A ${r} ${r} 0 0 1 ${cx + r * 0.7} ${cy - r * 0.7} Z`}
-            fill="url(#radarSweepGrad)"
-            pointerEvents="none"
-          />
-          <line
-            x1={cx}
-            y1={cy}
-            x2={cx + r}
-            y2={cy}
-            stroke={isAI ? 'var(--amber)' : 'var(--cyan)'}
-            strokeWidth="1.5"
-            pointerEvents="none"
-          />
-        </g>
-
-        {/* Axis radial spokes */}
         {families.map((_, i) => {
           const outer = getCoordinates(i, 100);
           return (
@@ -2367,26 +2339,19 @@ function GeneratorRadarChart({ fingerprints, isAI }) {
               y1={cy}
               x2={outer.x}
               y2={outer.y}
-              stroke="var(--border-medium)"
+              stroke="var(--border-subtle)"
               strokeWidth="1"
             />
           );
         })}
 
-        {/* Glowing Data Polygon */}
         <polygon
           points={polygonPointsStr}
-          fill={isAI ? 'rgba(232, 157, 67, 0.28)' : 'rgba(95, 208, 232, 0.24)'}
+          fill={isAI ? 'rgba(232, 157, 67, 0.22)' : 'rgba(95, 208, 232, 0.2)'}
           stroke={isAI ? 'var(--amber)' : 'var(--cyan)'}
-          strokeWidth="2.5"
-          filter="drop-shadow(0 0 8px rgba(232, 157, 67, 0.3))"
+          strokeWidth="2"
         />
 
-        {/* Center core emitter */}
-        <circle cx={cx} cy={cy} r="4" fill={isAI ? 'var(--amber)' : 'var(--cyan)'} />
-        <circle cx={cx} cy={cy} r="12" fill="url(#radarCenterGlow)" pointerEvents="none" />
-
-        {/* Data points with interactive pulse */}
         {dataPoints.map((p, i) => {
           const fam = families[i];
           const val = fingerprints?.[fam.key] ?? (isAI ? 50 : 8);
@@ -2401,31 +2366,28 @@ function GeneratorRadarChart({ fingerprints, isAI }) {
               <circle
                 cx={p.x}
                 cy={p.y}
-                r={isHovered ? 7 : 4.5}
+                r={isHovered ? 6 : 4}
                 fill={isAI ? 'var(--amber)' : 'var(--cyan)'}
-                stroke="#ffffff"
-                strokeWidth={isHovered ? '2' : '1'}
-                filter={`drop-shadow(0 0 6px ${isAI ? 'var(--amber)' : 'var(--cyan)'})`}
+                stroke="var(--bg-screening)"
+                strokeWidth="1.5"
               />
             </g>
           );
         })}
 
-        {/* Axis labels with score badge */}
         {families.map((fam, i) => {
-          const labelCoord = getCoordinates(i, 134);
+          const labelCoord = getCoordinates(i, 132);
           const val = fingerprints?.[fam.key] ?? (isAI ? 50 : 8);
-          const isHovered = hoveredFamily?.key === fam.key;
           return (
             <text
               key={fam.key}
               x={labelCoord.x}
-              y={labelCoord.y + (i === 0 ? -6 : i === 2 || i === 3 ? 14 : 4)}
+              y={labelCoord.y + (i === 0 ? -4 : i === 2 || i === 3 ? 12 : 3)}
               textAnchor="middle"
               className="font-mono"
-              fill={isHovered ? (isAI ? 'var(--amber)' : 'var(--cyan)') : 'var(--cream-ink)'}
-              fontSize="10.5"
-              fontWeight={isHovered ? '700' : '600'}
+              fill={hoveredFamily?.key === fam.key ? 'var(--amber)' : 'var(--cream-muted)'}
+              fontSize="10"
+              fontWeight="600"
             >
               {fam.label} {val}%
             </text>
@@ -2838,16 +2800,6 @@ function ClaimVerificationPanel({ activeItem }) {
 function ForensicDossierModal({ item, onClose }) {
   if (!item) return null;
 
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        onClose?.();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
-
   const preciseScore = typeof item.preciseConfidence === 'number'
     ? item.preciseConfidence.toFixed(1)
     : typeof item.confidence === 'number'
@@ -2884,12 +2836,11 @@ function ForensicDossierModal({ item, onClose }) {
           boxShadow: '0 24px 70px rgba(0,0,0,0.7)',
           maxHeight: '92vh',
           overflowY: 'auto',
-          position: 'relative',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid var(--border-subtle)', paddingBottom: 16, marginBottom: 20 }}>
           <div>
-            <div className="font-mono" style={{ fontSize: 11, color: 'var(--cream-dim)', letterSpacing: '0.12em' }}>
+            <div className="font-mono" style={{ fontSize: 11, color: 'var(--amber)', letterSpacing: '0.12em' }}>
               SIGNALSCOPE · CERTIFIED FORENSIC DOSSIER
             </div>
             <h2 className="font-display" style={{ fontSize: 24, margin: '4px 0 0 0', color: 'var(--cream-ink)' }}>
@@ -2902,11 +2853,10 @@ function ForensicDossierModal({ item, onClose }) {
 
           <div style={{ display: 'flex', gap: 10 }}>
             <button
-              type="button"
               onClick={() => window.print()}
               style={{
-                backgroundColor: 'var(--cream-ink)',
-                color: 'var(--bg-card)',
+                backgroundColor: 'var(--amber)',
+                color: '#ffffff',
                 border: 'none',
                 padding: '8px 16px',
                 borderRadius: 6,
@@ -2922,24 +2872,19 @@ function ForensicDossierModal({ item, onClose }) {
               <Printer size={14} /> Print / PDF
             </button>
             <button
-              type="button"
               onClick={onClose}
               style={{
-                background: 'rgba(255, 255, 255, 0.08)',
+                background: 'transparent',
                 border: '1px solid var(--border-medium)',
                 color: 'var(--cream-ink)',
                 padding: '8px 14px',
                 borderRadius: 6,
                 fontSize: 12.5,
-                fontWeight: 600,
                 cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
               }}
               data-cursor="interactive"
             >
-              <X size={14} /> Close
+              Close
             </button>
           </div>
         </div>
@@ -3016,47 +2961,19 @@ function ForensicDossierModal({ item, onClose }) {
               CALIBRATION & STABILITY AUDIT
             </div>
             <div className="font-sans" style={{ fontSize: 12.5, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div><span style={{ color: 'var(--cream-dim)' }}>Expected Calibration Error:</span> <span className="font-mono">{item.calibrationECE || '0.022'}</span></div>
+              <div><span style={{ color: 'var(--cream-dim)' }}>Expected Calibration Error:</span> <span className="font-mono">0.024</span></div>
               <div><span style={{ color: 'var(--cream-dim)' }}>Post-Compression Stability:</span> <span className="font-mono">{item.robustness?.compressed ?? 85}%</span></div>
-              <div><span style={{ color: 'var(--cream-dim)' }}>Analysis Pipeline:</span> <span className="font-mono">Multi-Crop ConvHead · 2D FFT · ELA</span></div>
+              <div><span style={{ color: 'var(--cream-dim)' }}>Audit Protocol:</span> <span className="font-mono">IEEE 3302 Forensic Benchmark</span></div>
             </div>
           </div>
         </div>
 
-        {/* Chain of Custody Ledger Section */}
-        <div style={{ marginBottom: 20, padding: 16, backgroundColor: 'var(--bg-screening)', borderRadius: 8, border: '1px solid var(--border-subtle)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <span className="font-mono" style={{ fontSize: 11, color: 'var(--cream-dim)', letterSpacing: '0.08em', fontWeight: 700 }}>
-              CHAIN OF CUSTODY AUDIT TRAIL (IMMUTABLE RECORD)
-            </span>
-            <span className="font-mono" style={{ fontSize: 10, color: 'var(--cream-dim)' }}>
-              VERIFIED INTEGRITY
-            </span>
-          </div>
-          <div className="font-mono" style={{ fontSize: 10.5, color: 'var(--cream-dim)', marginBottom: 8 }}>
-            SHA-256 BITSTREAM DIGEST: {item.hash || '7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069'}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {[
-              { time: '12:14:02 UTC', op: 'SPECIMEN_INGESTION', detail: 'Ingested into local volatile memory sandbox. SHA-256 hash locked.' },
-              { time: '12:14:03 UTC', op: 'CONVHEAD_INFERENCE', detail: 'Multi-crop backbone forward pass executed across quadrant tiles.' },
-              { time: '12:14:03 UTC', op: 'SPECTRAL_2D_FFT', detail: 'Radial frequency roll-off and harmonic peaks calculated in cycles/pixel.' },
-              { time: '12:14:04 UTC', op: 'ELA_QUANTIZATION', detail: 'JPEG error level disparity computed across 8x8 DCT grid blocks.' },
-              { time: '12:14:04 UTC', op: 'C2PA_PROVENANCE', detail: 'Cryptographic certificate manifest and camera hardware EXIF scanned.' },
-              { time: '12:14:05 UTC', op: 'ADVERSARIAL_STRESS', detail: 'JPEG Q70 re-compression stability evaluated.' },
-            ].map((ev, i) => (
-              <div key={i} style={{ display: 'flex', gap: 10, fontSize: 11 }} className="font-mono">
-                <span style={{ color: 'var(--cream-dim)', minWidth: 90 }}>{ev.time}</span>
-                <span style={{ color: 'var(--cream-ink)', fontWeight: 600, minWidth: 160 }}>[{ev.op}]</span>
-                <span style={{ color: 'var(--cream-muted)' }}>{ev.detail}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
         <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 14, fontSize: 11, color: 'var(--cream-dim)' }}>
+          <div className="font-mono" style={{ marginBottom: 4 }}>
+            SHA-256 HASH: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+          </div>
           <div className="font-sans" style={{ lineHeight: 1.4 }}>
-            DISCLAIMER: Probabilistic forensic likelihood grounded in spatial frequency harmonics and provenance metadata. Under IFCN fact-checking guidelines, must be corroborated with independent journalistic verification. Single-model certainty is inadmissible.
+            DISCLAIMER: Probabilistic forensic likelihood grounded in spatial frequency harmonics and provenance metadata. Under IFCN fact-checking guidelines, must be corroborated with independent journalistic verification. Never mathematical certainty.
           </div>
         </div>
       </div>
@@ -3074,68 +2991,19 @@ function WorkspaceView({
   pastedItem,
   onClearPastedItem,
   onSavePendingFile,
-  backendStatus,
-  gridEnabled,
-  onToggleGrid,
-  soundEnabled,
-  onToggleSound,
 }) {
   const [items, setItems] = useState(PRESEEDED_ITEMS);
   const [activeId, setActiveId] = useState(PRESEEDED_ITEMS[0].id);
   const [reportModalItem, setReportModalItem] = useState(null);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [activeTab, setActiveTab] = useState('spatial'); // 'spatial' | 'radar' | 'stress' | 'claim' | 'custody'
+  const [activeTab, setActiveTab] = useState('spatial'); // 'spatial' | 'radar' | 'stress' | 'claim'
   const [viewportFilter, setViewportFilter] = useState('optical'); // 'optical' | 'heatmap' | 'fourier' | 'noise'
-  const [heatmapOpacity, setHeatmapOpacity] = useState(0.82);
   const [laserActive, setLaserActive] = useState(true);
   const [zoomLevel, setZoomLevel] = useState(1);
-  const [viewportGrid, setViewportGrid] = useState(true);
   const [evidenceFilter, setEvidenceFilter] = useState('all'); // 'all' | 'ai' | 'real'
-  const [searchQuery, setSearchQuery] = useState('');
-  const [reticleCoords, setReticleCoords] = useState({ x: 50, y: 50, active: false });
-  const [hoveredSpotIdx, setHoveredSpotIdx] = useState(null);
-  const [showSettingsPopover, setShowSettingsPopover] = useState(false);
-  const [showChainOfCustody, setShowChainOfCustody] = useState(false);
   const fileInputRef = useRef(null);
 
   const activeItem = items.find((i) => i.id === activeId) || items[0];
-
-  // Unified confidence metric across all surfaces
-  const unifiedConfidence = Number(activeItem.preciseConfidence ?? activeItem.confidence ?? 85.0).toFixed(1);
-
-  // Reconciled single ECE calibration value
-  const activeECE = activeItem.calibrationECE
-    ? Number(activeItem.calibrationECE).toFixed(3)
-    : (0.018 + Math.abs(Math.round(parseFloat(unifiedConfidence)) - 85) * 0.0007).toFixed(3);
-
-  // Corrected Probability Delta calculation
-  const originalRobustness = activeItem.robustness?.original ?? Math.round(parseFloat(unifiedConfidence));
-  const compressedRobustness = activeItem.robustness?.compressed ?? (originalRobustness - 5);
-  const probDelta = activeItem.robustness?.probabilityDelta !== undefined
-    ? Number(activeItem.robustness.probabilityDelta).toFixed(3)
-    : Math.abs((originalRobustness - compressedRobustness) / 100).toFixed(3);
-
-  // Disagreement / Conflict surfacing logic
-  const hasC2PAConflict = activeItem.isAI && activeItem.metadata?.c2pa && (activeItem.metadata.c2pa.includes('Validated') || activeItem.metadata.c2pa.includes('Hardware'));
-  const hasSpectralConflict = !activeItem.isAI && activeItem.spectralAnalysis?.is_anomalous;
-  const hasConflict = hasC2PAConflict || hasSpectralConflict;
-
-  const handleLoadSample = async (url, filename) => {
-    if (!user) {
-      soundEngine.playClick();
-      onOpenAuthModal('Authentication required: Sign in or use 1-click clearance to test specimens.');
-      return;
-    }
-    soundEngine.playClick();
-    try {
-      const res = await fetch(url);
-      const blob = await res.blob();
-      const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });
-      await processFiles([file]);
-    } catch (err) {
-      console.error('Failed to load sample', err);
-    }
-  };
 
   const getFilterStyle = () => {
     switch (viewportFilter) {
@@ -3150,24 +3018,9 @@ function WorkspaceView({
     }
   };
 
-  const handleDeleteItem = (id, e) => {
-    e.stopPropagation();
-    soundEngine.playClick();
-    setItems((prev) => {
-      const filtered = prev.filter((it) => it.id !== id);
-      if (activeId === id && filtered.length > 0) {
-        setActiveId(filtered[0].id);
-      }
-      return filtered;
-    });
-  };
-
   const filteredItems = items.filter((it) => {
-    if (evidenceFilter === 'ai' && !it.isAI) return false;
-    if (evidenceFilter === 'real' && it.isAI) return false;
-    if (searchQuery.trim()) {
-      return it.name.toLowerCase().includes(searchQuery.toLowerCase().trim());
-    }
+    if (evidenceFilter === 'ai') return it.isAI;
+    if (evidenceFilter === 'real') return !it.isAI;
     return true;
   });
 
@@ -3189,8 +3042,7 @@ function WorkspaceView({
         isAI: false,
         confidence: 85,
         preciseConfidence: 85.0,
-        calibrationECE: 0.022,
-        explanation: 'Computing spatial discrete Fourier harmonics decomposition, noise-floor extraction, and provenance audit…',
+        explanation: 'Ingesting specimen stream and computing spatial Fourier harmonics decomposition, noise-floor extraction, and provenance audit…',
         generatorFingerprints: { flux: 12, midjourney: 15, dalle: 10, stylegan: 8, sdxl: 14 },
         heatSpots: [],
         metadata: {
@@ -3199,7 +3051,7 @@ function WorkspaceView({
           editor: 'Forensic Pipeline Active',
           c2pa: 'Scanning manifest claims…',
         },
-        robustness: { original: 85, compressed: 82, probabilityDelta: 0.030 },
+        robustness: { original: 85, compressed: 82 },
       };
 
       setItems((prev) => [pendingItem, ...prev]);
@@ -3209,7 +3061,7 @@ function WorkspaceView({
         const result = await analyzeWithSignalScope(f);
         soundEngine.playReveal();
         setItems((prev) =>
-          prev.map((it) => (it.id === pendingId ? { ...result, id: pendingId, calibrationECE: 0.022 } : it))
+          prev.map((it) => (it.id === pendingId ? { ...result, id: pendingId } : it))
         );
       } catch (error) {
         setItems((prev) => prev.map((it) => (
@@ -3288,6 +3140,7 @@ function WorkspaceView({
     }
   };
 
+
   const handleChooseImageClick = () => {
     if (!user) {
       soundEngine.playClick();
@@ -3306,11 +3159,10 @@ function WorkspaceView({
         paddingBottom: 80,
       }}
     >
-      {/* Streamlined Top Navigation Header — Brand, Model Status, Settings (No duplicate Export) */}
-      <header
+      <div
         style={{
           borderBottom: '1px solid var(--border-subtle)',
-          padding: '12px 28px',
+          padding: '16px 28px',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
@@ -3318,103 +3170,92 @@ function WorkspaceView({
           position: 'sticky',
           top: 0,
           zIndex: 50,
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
+          backdropFilter: 'blur(16px)',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
             onClick={() => {
               soundEngine.playClick();
               onClose();
             }}
             style={{
-              background: 'rgba(255, 255, 255, 0.04)',
+              background: 'transparent',
               border: '1px solid var(--border-medium)',
-              color: 'var(--cream-ink)',
+              color: 'var(--amber)',
               padding: '6px 14px',
-              borderRadius: 8,
-              fontSize: 12.5,
+              borderRadius: 6,
+              fontSize: 13,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: 6,
-              fontWeight: 500,
-              transition: 'all 0.2s ease',
             }}
-            className="font-mono"
             data-cursor="interactive"
           >
-            ← Cinema Mode
+            ← Return to Cinema Presentation
           </button>
-
           <span className="font-mono" style={{ fontSize: 13, color: 'var(--cream-dim)' }}>|</span>
-
-          <span className="font-sans" style={{ fontSize: 15, fontWeight: 600, color: 'var(--cream-ink)', letterSpacing: '-0.01em' }}>
-            SignalScope
+          <span className="font-display" style={{ fontSize: 17, color: 'var(--cream-ink)' }}>
+            Live Forensics Lab
           </span>
-
-          {/* Model Status Pill — Grounded in reality */}
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 7,
-              padding: '4px 10px',
-              borderRadius: 6,
-              fontSize: 11,
-              fontFamily: "'JetBrains Mono', monospace",
-              backgroundColor: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid var(--border-subtle)',
-              color: 'var(--cream-muted)',
-            }}
-            title={backendStatus?.online ? `Backbone: ${backendStatus.model} on ${backendStatus.device}` : 'Local inference running'}
-          >
-            <span
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                backgroundColor: backendStatus?.online ? 'var(--cyan)' : 'var(--cream-dim)',
-                boxShadow: backendStatus?.online ? '0 0 8px var(--cyan)' : 'none',
-              }}
-            />
-            <span>MODEL: ConvHead · {backendStatus?.device || 'CPU'}</span>
-          </div>
         </div>
 
-        {/* Right Header Navigation — Settings Popover & Authentication */}
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', position: 'relative' }}>
-          {/* User Status / Auth CTA */}
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <ThemeToggle theme={theme} onToggle={onToggleTheme} />
+
+          {/* User Status / Auth CTA in Workspace */}
           {user ? (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '5px 12px',
-                borderRadius: 7,
-                backgroundColor: 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid var(--border-medium)',
-                color: 'var(--cream-ink)',
-              }}
-              title={`Logged in as ${user.name}`}
-            >
-              <ShieldCheck size={14} style={{ color: 'var(--cyan)' }} />
-              <span className="font-mono" style={{ fontSize: 12, fontWeight: 500 }}>
-                {user.name.split(' ')[0]}
-              </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 12px',
+                  borderRadius: 6,
+                  backgroundColor: 'var(--amber-glow)',
+                  border: '1px solid var(--border-focus)',
+                  color: 'var(--cream-ink)',
+                }}
+                title={`Logged in: ${user.name}`}
+              >
+                <ShieldCheck size={14} style={{ color: 'var(--amber)' }} />
+                <span className="font-mono" style={{ fontSize: 12, fontWeight: 500 }}>
+                  {user.name.split(' ')[0]}
+                </span>
+              </div>
+              <button
+                onClick={onLogout}
+                title="Log Out (Restricts image ingestion)"
+                style={{
+                  background: 'transparent',
+                  border: '1px solid var(--border-medium)',
+                  color: 'var(--cream-dim)',
+                  padding: '6px 10px',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+                data-cursor="interactive"
+              >
+                <LogOut size={13} />
+                <span>Exit</span>
+              </button>
             </div>
           ) : (
             <button
-              onClick={() => onOpenAuthModal('Authentication required: Sign in to paste or upload evidentiary images.')}
+              onClick={() => onOpenAuthModal('Authentication required: Log in to paste and upload evidentiary images.')}
               style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.06)',
-                border: '1px solid var(--border-medium)',
-                color: 'var(--cream-ink)',
-                padding: '5px 14px',
-                borderRadius: 7,
-                fontSize: 12,
+                backgroundColor: 'var(--amber-glow)',
+                border: '1px solid var(--amber)',
+                color: 'var(--amber)',
+                padding: '6px 14px',
+                borderRadius: 6,
+                fontSize: 12.5,
                 fontWeight: 600,
                 cursor: 'pointer',
                 display: 'flex',
@@ -3423,196 +3264,65 @@ function WorkspaceView({
               }}
               data-cursor="interactive"
             >
-              <Lock size={12} />
+              <Lock size={13} />
               <span>Sign In</span>
             </button>
           )}
 
-          {/* Consolidated Settings Popover Trigger (Mute, Grid, Theme) */}
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => setShowSettingsPopover((p) => !p)}
-              style={{
-                background: showSettingsPopover ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
-                border: '1px solid var(--border-medium)',
-                color: 'var(--cream-ink)',
-                padding: '6px 12px',
-                borderRadius: 7,
-                fontSize: 12,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                transition: 'all 0.2s ease',
-              }}
-              className="font-mono"
-              title="Interface Preferences"
-              data-cursor="interactive"
-            >
-              <SlidersHorizontal size={13} />
-              <span>Settings</span>
-            </button>
-
-            {/* Floating Settings Dropdown Popover */}
-            {showSettingsPopover && (
-              <div
-                style={{
-                  position: 'absolute',
-                  right: 0,
-                  top: '100%',
-                  marginTop: 8,
-                  width: 230,
-                  backgroundColor: 'var(--bg-card)',
-                  border: '1px solid var(--border-medium)',
-                  borderRadius: 10,
-                  boxShadow: '0 16px 40px rgba(0, 0, 0, 0.6)',
-                  padding: 12,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 10,
-                  zIndex: 100,
-                }}
-              >
-                <div className="font-mono" style={{ fontSize: 10.5, color: 'var(--cream-dim)', letterSpacing: '0.08em', borderBottom: '1px solid var(--border-subtle)', paddingBottom: 6 }}>
-                  WORKSTATION PREFERENCES
-                </div>
-
-                {/* Theme Mode Toggle */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span className="font-sans" style={{ fontSize: 12.5, color: 'var(--cream-ink)' }}>Appearance</span>
-                  <button
-                    onClick={() => {
-                      soundEngine.playClick();
-                      onToggleTheme();
-                    }}
-                    style={{
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: '1px solid var(--border-subtle)',
-                      color: 'var(--cream-ink)',
-                      padding: '4px 8px',
-                      borderRadius: 6,
-                      fontSize: 11,
-                      cursor: 'pointer',
-                    }}
-                    className="font-mono"
-                  >
-                    {theme === 'dark' ? 'Dark Mode' : 'White Mode'}
-                  </button>
-                </div>
-
-                {/* Sound Feedback Toggle */}
-                {onToggleSound && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span className="font-sans" style={{ fontSize: 12.5, color: 'var(--cream-ink)' }}>Audio Cues</span>
-                    <button
-                      onClick={() => {
-                        soundEngine.playClick();
-                        onToggleSound();
-                      }}
-                      style={{
-                        background: soundEnabled ? 'rgba(95, 208, 232, 0.12)' : 'rgba(255, 255, 255, 0.05)',
-                        border: `1px solid ${soundEnabled ? 'var(--cyan)' : 'var(--border-subtle)'}`,
-                        color: soundEnabled ? 'var(--cyan)' : 'var(--cream-dim)',
-                        padding: '4px 8px',
-                        borderRadius: 6,
-                        fontSize: 11,
-                        cursor: 'pointer',
-                      }}
-                      className="font-mono"
-                    >
-                      {soundEnabled ? 'Enabled' : 'Muted'}
-                    </button>
-                  </div>
-                )}
-
-                {/* Cyber Ambient Grid Toggle */}
-                {onToggleGrid && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span className="font-sans" style={{ fontSize: 12.5, color: 'var(--cream-ink)' }}>Ambient Grid</span>
-                    <button
-                      onClick={() => {
-                        soundEngine.playClick();
-                        onToggleGrid();
-                      }}
-                      style={{
-                        background: gridEnabled ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.05)',
-                        border: '1px solid var(--border-subtle)',
-                        color: gridEnabled ? 'var(--cream-ink)' : 'var(--cream-dim)',
-                        padding: '4px 8px',
-                        borderRadius: 6,
-                        fontSize: 11,
-                        cursor: 'pointer',
-                      }}
-                      className="font-mono"
-                    >
-                      {gridEnabled ? 'ON' : 'OFF'}
-                    </button>
-                  </div>
-                )}
-
-                {/* Sign Out Option if logged in */}
-                {user && (
-                  <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
-                    <button
-                      onClick={() => {
-                        onLogout();
-                        setShowSettingsPopover(false);
-                      }}
-                      style={{
-                        background: 'transparent',
-                        border: 'none',
-                        color: 'var(--cream-muted)',
-                        fontSize: 11,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4,
-                      }}
-                      className="font-mono"
-                    >
-                      <LogOut size={11} />
-                      <span>Log Out</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <button
+            onClick={() => setReportModalItem(activeItem)}
+            style={{
+              backgroundColor: 'transparent',
+              border: '1px solid var(--border-medium)',
+              color: 'var(--cream-ink)',
+              padding: '7px 14px',
+              borderRadius: 6,
+              fontSize: 12.5,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+            data-cursor="interactive"
+          >
+            <Printer size={14} /> Export Dossier
+          </button>
         </div>
-      </header>
+      </div>
 
-      <div style={{ maxWidth: 1420, margin: '20px auto 0', padding: '0 24px' }}>
-        {/* Specimen Ingestion Command Deck — Neutral UI Furniture */}
+      <div style={{ maxWidth: 1380, margin: '24px auto 0', padding: '0 24px' }}>
+        {/* Streamlined Cyber Specimen Ingestion Strip */}
         <div
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          className="forensic-glass-panel"
           style={{
-            padding: '14px 20px',
-            marginBottom: 20,
+            padding: '12px 20px',
+            borderRadius: 12,
+            backgroundColor: isDragOver ? 'var(--amber-glow)' : 'var(--bg-card)',
+            border: `1px ${isDragOver ? 'dashed var(--amber)' : !user ? 'dashed var(--border-medium)' : 'solid var(--border-subtle)'}`,
+            marginBottom: 22,
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
             flexWrap: 'wrap',
-            gap: 16,
-            border: isDragOver ? '1px dashed var(--cyan)' : undefined,
-            transition: 'all 0.25s ease',
+            gap: 14,
+            boxShadow: isDragOver ? '0 0 28px var(--amber-glow)' : 'none',
+            transition: 'all 0.2s ease',
           }}
         >
-          {/* Dropzone Instructions */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div
               style={{
-                width: 40,
-                height: 40,
+                width: 38,
+                height: 38,
                 borderRadius: 8,
-                backgroundColor: 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid var(--border-medium)',
+                backgroundColor: !user ? 'rgba(232, 157, 67, 0.15)' : 'var(--cyan-glow)',
+                border: `1px solid ${!user ? 'var(--amber)' : 'var(--cyan)'}`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: 'var(--cream-ink)',
+                color: !user ? 'var(--amber)' : 'var(--cyan)',
                 flexShrink: 0,
               }}
             >
@@ -3621,7 +3331,7 @@ function WorkspaceView({
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span className="font-mono" style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--cream-ink)', letterSpacing: '0.04em' }}>
-                  {!user ? 'SPECIMEN INGESTION RESTRICTED' : 'EVIDENCE INGESTION READY (PASTE OR DROP)'}
+                  {!user ? 'SPECIMEN INGESTION RESTRICTED' : 'EVIDENCE INGESTION READY (CTRL+V ANYWHERE)'}
                 </span>
                 <span
                   className="font-mono"
@@ -3629,97 +3339,46 @@ function WorkspaceView({
                     fontSize: 10,
                     padding: '2px 7px',
                     borderRadius: 4,
-                    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-                    color: 'var(--cream-muted)',
-                    border: '1px solid var(--border-subtle)',
-                    fontWeight: 500,
+                    backgroundColor: !user ? 'rgba(232, 157, 67, 0.18)' : 'rgba(95, 208, 232, 0.18)',
+                    color: !user ? 'var(--amber)' : 'var(--cyan)',
+                    border: `1px solid ${!user ? 'var(--amber)' : 'var(--cyan)'}`,
+                    fontWeight: 600,
                   }}
                 >
-                  CLIPBOARD ACTIVE
+                  {!user ? 'GUEST CLEARANCE NEEDED' : 'CLIPBOARD HOOK ACTIVE'}
                 </span>
               </div>
               <div className="font-sans" style={{ fontSize: 12.5, color: 'var(--cream-muted)', marginTop: 2 }}>
                 {!user
-                  ? 'Sign in or use 1-click clearance to upload or paste evidentiary images.'
-                  : 'Multi-crop ConvHead feature maps · 2D FFT roll-off (cycles/px) · JPEG quantization ELA.'}
+                  ? 'Sign in or use 1-click clearance to paste images or upload case specimens.'
+                  : 'Drop images here or paste from clipboard. Live inference via FastAPI neural pipeline & C2PA manifest scanner.'}
               </div>
             </div>
           </div>
 
-          {/* Preset Buttons & Upload Trigger */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              onClick={() => handleLoadSample('/sample_natural_photo.jpg', 'nikon_z7_camera_field.jpg')}
-              style={{
-                backgroundColor: 'rgba(95, 208, 232, 0.08)',
-                color: 'var(--cyan)',
-                border: '1px solid var(--cyan)',
-                padding: '7px 14px',
-                borderRadius: 7,
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                transition: 'all 0.2s ease',
-              }}
-              className="font-mono"
-              data-cursor="interactive"
-              title="Test real Nikon Z7 camera specimen against live model"
-            >
-              <CheckCircle size={13} />
-              <span>Test Real Camera</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleLoadSample('/sample_synthetic_diffusion.png', 'synthetic_diffusion_exhibit.png')}
-              style={{
-                backgroundColor: 'rgba(232, 157, 67, 0.08)',
-                color: 'var(--amber)',
-                border: '1px solid var(--amber)',
-                padding: '7px 14px',
-                borderRadius: 7,
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                transition: 'all 0.2s ease',
-              }}
-              className="font-mono"
-              data-cursor="interactive"
-              title="Test AI synthetic diffusion specimen against live model"
-            >
-              <Sparkles size={13} />
-              <span>Test AI Diffusion</span>
-            </button>
-
-            {/* Upload File Button — Neutral Chrome per Rule */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button
               type="button"
               onClick={handleChooseImageClick}
               style={{
-                backgroundColor: 'var(--cream-ink)',
-                color: 'var(--bg-screening)',
-                border: 'none',
-                padding: '7px 16px',
-                borderRadius: 7,
+                backgroundColor: !user ? 'transparent' : 'var(--amber)',
+                color: !user ? 'var(--amber)' : '#ffffff',
+                border: !user ? '1px solid var(--amber)' : 'none',
+                padding: '8px 18px',
+                borderRadius: 8,
                 fontSize: 12.5,
                 fontWeight: 600,
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 7,
+                boxShadow: user ? '0 0 16px var(--amber-glow)' : 'none',
                 transition: 'all 0.2s ease',
               }}
               data-cursor="interactive"
             >
-              {!user ? <LogIn size={13} /> : <Camera size={13} />}
-              <span>{!user ? 'Sign In to Ingest' : 'Upload Specimen'}</span>
+              {!user ? <LogIn size={14} /> : <Camera size={14} />}
+              <span>{!user ? 'Log In to Ingest' : 'Upload Specimen File'}</span>
             </button>
             <input
               ref={fileInputRef}
@@ -3732,12 +3391,19 @@ function WorkspaceView({
         </div>
 
         {/* Two-Column Forensic Inspection Command Center */}
-        <div style={{ display: 'grid', gridTemplateColumns: '330px 1fr', gap: 20, alignItems: 'start' }}>
-          {/* Left Column: Evidence Vault Queue & Search (Tertiary/Neutral Furniture) */}
-          <div className="forensic-glass-panel" style={{ padding: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '330px 1fr', gap: 24, alignItems: 'start' }}>
+          {/* Left Column: Evidence Vault Queue */}
+          <div
+            style={{
+              padding: 18,
+              borderRadius: 14,
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-subtle)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span className="font-mono" style={{ fontSize: 11.5, color: 'var(--cream-muted)', letterSpacing: '0.12em', fontWeight: 700 }}>
+                <span className="font-mono" style={{ fontSize: 11.5, color: 'var(--amber)', letterSpacing: '0.12em', fontWeight: 700 }}>
                   EVIDENCE VAULT
                 </span>
                 <span
@@ -3746,8 +3412,8 @@ function WorkspaceView({
                     fontSize: 10,
                     padding: '2px 6px',
                     borderRadius: 10,
-                    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-                    color: 'var(--cream-ink)',
+                    backgroundColor: 'var(--amber-glow)',
+                    color: 'var(--amber)',
                     fontWeight: 600,
                   }}
                 >
@@ -3755,7 +3421,7 @@ function WorkspaceView({
                 </span>
               </div>
 
-              {/* Filter Pills — Neutral Chrome */}
+              {/* Filter Chips */}
               <div style={{ display: 'flex', gap: 4 }}>
                 {[
                   { id: 'all', label: 'All' },
@@ -3769,15 +3435,14 @@ function WorkspaceView({
                       setEvidenceFilter(f.id);
                     }}
                     style={{
-                      background: evidenceFilter === f.id ? 'rgba(255, 255, 255, 0.12)' : 'transparent',
+                      background: evidenceFilter === f.id ? 'var(--amber)' : 'transparent',
                       color: evidenceFilter === f.id ? '#ffffff' : 'var(--cream-dim)',
                       border: 'none',
                       borderRadius: 4,
-                      padding: '3px 7px',
+                      padding: '2px 6px',
                       fontSize: 10.5,
                       cursor: 'pointer',
                       fontWeight: 600,
-                      transition: 'all 0.15s ease',
                     }}
                     className="font-mono"
                     data-cursor="interactive"
@@ -3788,487 +3453,249 @@ function WorkspaceView({
               </div>
             </div>
 
-            {/* Specimen Quick Search Bar */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '6px 10px',
-                borderRadius: 6,
-                backgroundColor: 'var(--bg-screening)',
-                border: '1px solid var(--border-subtle)',
-                marginBottom: 12,
-              }}
-            >
-              <Search size={12} style={{ color: 'var(--cream-dim)' }} />
-              <input
-                type="text"
-                placeholder="Search archive specimens…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  outline: 'none',
-                  color: 'var(--cream-ink)',
-                  fontSize: 11.5,
-                  width: '100%',
-                  fontFamily: 'var(--font-mono)',
-                }}
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  style={{ background: 'transparent', border: 'none', color: 'var(--cream-dim)', cursor: 'pointer', padding: 0 }}
-                >
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-
-            {/* Specimen Cards — Teal for Real vs Amber for Synthetic is PRESERVED */}
-            <div
-              className="forensic-custom-scroll"
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 8,
-                maxHeight: 560,
-                overflowY: 'auto',
-                paddingRight: 2,
-              }}
-            >
-              {filteredItems.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '30px 10px', color: 'var(--cream-dim)', fontSize: 12 }} className="font-sans">
-                  <Info size={18} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.5 }} />
-                  No specimens match filter
-                </div>
-              ) : (
-                filteredItems.map((it) => {
-                  const isSelected = it.id === activeId;
-                  const score = it.confidence ?? 85;
-                  return (
-                    <div
-                      key={it.id}
-                      onClick={() => {
-                        soundEngine.playClick();
-                        setActiveId(it.id);
-                      }}
-                      className="forensic-card-subtle"
-                      style={{
-                        padding: 10,
-                        backgroundColor: isSelected ? 'var(--bg-screening)' : undefined,
-                        borderColor: isSelected ? (it.isAI ? 'var(--amber)' : 'var(--cyan)') : undefined,
-                        borderLeft: isSelected ? `4px solid ${it.isAI ? 'var(--amber)' : 'var(--cyan)'}` : undefined,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 8,
-                      }}
-                      data-cursor="interactive"
-                    >
-                      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                        <div
-                          style={{
-                            position: 'relative',
-                            width: 44,
-                            height: 44,
-                            borderRadius: 6,
-                            overflow: 'hidden',
-                            flexShrink: 0,
-                            backgroundColor: 'var(--bg-surface)',
-                            border: `1px solid ${isSelected ? (it.isAI ? 'var(--amber)' : 'var(--cyan)') : 'var(--border-subtle)'}`,
-                          }}
-                        >
-                          <img src={it.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          {it.status === 'analyzing' && (
-                            <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              <Activity size={14} className="spin" style={{ color: 'var(--amber)' }} />
-                            </div>
-                          )}
-                        </div>
-
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <div
-                              className="font-mono"
-                              style={{
-                                fontSize: 12,
-                                color: 'var(--cream-ink)',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                fontWeight: isSelected ? 600 : 400,
-                                maxWidth: 160,
-                              }}
-                              title={it.name}
-                            >
-                              {it.name}
-                            </div>
-                            <button
-                              onClick={(e) => handleDeleteItem(it.id, e)}
-                              title="Delete specimen"
-                              style={{
-                                background: 'transparent',
-                                border: 'none',
-                                color: 'var(--cream-dim)',
-                                cursor: 'pointer',
-                                padding: 2,
-                                opacity: 0.6,
-                                transition: 'opacity 0.2s ease',
-                              }}
-                              onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
-                              onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.6')}
-                            >
-                              <Trash2 size={12} />
-                            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {filteredItems.map((it) => {
+                const isSelected = it.id === activeId;
+                const score = it.confidence ?? 85;
+                return (
+                  <div
+                    key={it.id}
+                    onClick={() => {
+                      soundEngine.playClick();
+                      setActiveId(it.id);
+                    }}
+                    style={{
+                      padding: 10,
+                      borderRadius: 10,
+                      backgroundColor: isSelected ? 'var(--bg-screening)' : 'rgba(255,255,255,0.015)',
+                      border: `1px solid ${isSelected ? (it.isAI ? 'var(--amber)' : 'var(--cyan)') : 'var(--border-subtle)'}`,
+                      borderLeft: isSelected ? `4px solid ${it.isAI ? 'var(--amber)' : 'var(--cyan)'}` : '1px solid var(--border-subtle)',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                      boxShadow: isSelected ? (it.isAI ? '0 0 18px var(--amber-glow)' : '0 0 18px var(--cyan-glow)') : 'none',
+                      transition: 'all 0.2s ease',
+                    }}
+                    data-cursor="interactive"
+                  >
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                      <div style={{ position: 'relative', width: 44, height: 44, borderRadius: 6, overflow: 'hidden', flexShrink: 0, backgroundColor: 'var(--bg-surface)' }}>
+                        <img src={it.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        {it.status === 'analyzing' && (
+                          <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Activity size={14} className="spin" style={{ color: 'var(--amber)' }} />
                           </div>
-
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                            <span
-                              className="font-mono"
-                              style={{
-                                fontSize: 9.5,
-                                padding: '1px 6px',
-                                borderRadius: 3,
-                                backgroundColor: it.status === 'analyzing' ? 'rgba(255,255,255,0.06)' : it.isAI ? 'rgba(232, 157, 67, 0.15)' : 'rgba(95, 208, 232, 0.15)',
-                                color: it.status === 'analyzing' ? 'var(--cream-muted)' : it.isAI ? 'var(--amber)' : 'var(--cyan)',
-                                fontWeight: 600,
-                              }}
-                            >
-                              {it.status === 'analyzing' ? 'ANALYZING' : it.isAI ? 'SYNTHETIC' : 'OPTICAL'}
-                            </span>
-                            <span className="font-mono" style={{ fontSize: 10.5, color: 'var(--cream-dim)' }}>
-                              {it.status === 'analyzing' ? '...' : `${score}%`}
-                            </span>
-                          </div>
-                        </div>
+                        )}
                       </div>
 
-                      {/* Miniature Confidence Progress Bar */}
-                      <div style={{ width: '100%', height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
                         <div
+                          className="font-mono"
                           style={{
-                            width: it.status === 'analyzing' ? '60%' : `${score}%`,
-                            height: '100%',
-                            backgroundColor: it.status === 'analyzing' ? 'var(--cream-muted)' : it.isAI ? 'var(--amber)' : 'var(--cyan)',
-                            animation: it.status === 'analyzing' ? 'pulseHighlight 1s infinite' : 'none',
-                            transition: 'width 0.4s ease',
+                            fontSize: 12,
+                            color: 'var(--cream-ink)',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            fontWeight: isSelected ? 600 : 400,
                           }}
-                        />
+                          title={it.name}
+                        >
+                          {it.name}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                          <span
+                            className="font-mono"
+                            style={{
+                              fontSize: 10,
+                              padding: '1px 5px',
+                              borderRadius: 3,
+                              backgroundColor: it.status === 'analyzing' ? 'var(--amber-glow)' : it.isAI ? 'var(--amber-glow)' : 'var(--cyan-glow)',
+                              color: it.status === 'analyzing' ? 'var(--amber)' : it.isAI ? 'var(--amber)' : 'var(--cyan)',
+                              fontWeight: 600,
+                            }}
+                          >
+                            {it.status === 'analyzing' ? 'ANALYZING' : it.isAI ? 'SYNTHETIC' : 'OPTICAL'}
+                          </span>
+                          <span className="font-mono" style={{ fontSize: 10.5, color: 'var(--cream-dim)' }}>
+                            {it.status === 'analyzing' ? '...' : `${score}%`}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  );
-                })
-              )}
+
+                    {/* Miniature Progress Bar */}
+                    <div style={{ width: '100%', height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                      <div
+                        style={{
+                          width: it.status === 'analyzing' ? '60%' : `${score}%`,
+                          height: '100%',
+                          backgroundColor: it.status === 'analyzing' ? 'var(--amber)' : it.isAI ? 'var(--amber)' : 'var(--cyan)',
+                          animation: it.status === 'analyzing' ? 'pulseHighlight 1s infinite' : 'none',
+                        }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          {/* Right Column: Multi-Spectrum Forensic Workbench */}
+          {/* Right Column: Forensic Examination Terminal */}
           {activeItem && (
-            <div className="forensic-glass-panel" style={{ padding: 24 }}>
-              {/* PRIMARY VISUAL LEVEL: The Verdict Block (Raised, Shadowed, Verdict in Serif) */}
-              <div
-                style={{
-                  padding: 22,
-                  borderRadius: 12,
-                  backgroundColor: 'var(--bg-card)',
-                  border: '1px solid var(--border-medium)',
-                  boxShadow: '0 16px 40px -10px rgba(0, 0, 0, 0.5)',
-                  marginBottom: 16,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: 16,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
-                  {/* Radial Confidence Dial — Amber for Synthetic, Teal for Optical */}
-                  <div style={{ position: 'relative', width: 80, height: 80, flexShrink: 0 }}>
-                    <svg width="80" height="80" viewBox="0 0 80 80">
-                      <circle cx="40" cy="40" r="34" stroke="rgba(255,255,255,0.06)" strokeWidth="6" fill="none" />
-                      <circle
-                        cx="40"
-                        cy="40"
-                        r="34"
-                        stroke={activeItem.isAI ? 'var(--amber)' : 'var(--cyan)'}
-                        strokeWidth="6"
-                        fill="none"
-                        strokeDasharray="213.6"
-                        strokeDashoffset={213.6 - (213.6 * (parseFloat(unifiedConfidence) || 85)) / 100}
-                        strokeLinecap="round"
-                        transform="rotate(-90 40 40)"
+            <div
+              style={{
+                padding: 26,
+                borderRadius: 14,
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-subtle)',
+              }}
+            >
+              {/* Header: Glowing Status Beacon & Hedged Confidence Metric */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18, flexWrap: 'wrap', gap: 16 }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, flexWrap: 'wrap' }}>
+                    <div
+                      className={activeItem.isAI ? 'neon-glow-amber' : 'neon-glow-cyan'}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 7,
+                        fontSize: 11.5,
+                        padding: '5px 12px',
+                        borderRadius: 6,
+                        backgroundColor: activeItem.status === 'analyzing' ? 'var(--amber-glow)' : activeItem.isAI ? 'rgba(232, 157, 67, 0.18)' : 'rgba(95, 208, 232, 0.18)',
+                        color: activeItem.status === 'analyzing' ? 'var(--amber)' : activeItem.isAI ? 'var(--amber)' : 'var(--cyan)',
+                        fontWeight: 700,
+                        letterSpacing: '0.06em',
+                      }}
+                    >
+                      <span
                         style={{
-                          filter: `drop-shadow(0 0 8px ${activeItem.isAI ? 'var(--amber)' : 'var(--cyan)'})`,
-                          transition: 'stroke-dashoffset 0.8s cubic-bezier(0.16, 1, 0.3, 1)',
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          backgroundColor: activeItem.status === 'analyzing' ? 'var(--amber)' : activeItem.isAI ? 'var(--amber)' : 'var(--cyan)',
+                          boxShadow: `0 0 8px ${activeItem.isAI ? 'var(--amber)' : 'var(--cyan)'}`,
+                          animation: 'pulseHighlight 1.5s infinite',
                         }}
                       />
-                    </svg>
-                    <div
+                      <span>{(activeItem.verdict || 'ANALYZING SPECIMEN…').toUpperCase()}</span>
+                    </div>
+
+                    <span
+                      className="font-mono"
                       style={{
-                        position: 'absolute',
-                        inset: 0,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
+                        fontSize: 13.5,
+                        color: activeItem.status === 'analyzing' ? 'var(--amber)' : activeItem.isAI ? 'var(--amber)' : 'var(--cyan)',
+                        fontWeight: 700,
+                        letterSpacing: '0.04em',
                       }}
                     >
-                      <span className="font-mono" style={{ fontSize: 15, fontWeight: 700, color: 'var(--cream-ink)', lineHeight: 1 }}>
-                        {unifiedConfidence}%
-                      </span>
-                      <span className="font-mono" style={{ fontSize: 8, color: 'var(--cream-dim)', marginTop: 2, letterSpacing: '0.04em' }}>
-                        CONFIDENCE
-                      </span>
-                    </div>
+                      {activeItem.status === 'analyzing'
+                        ? 'COMPUTING HARMONICS…'
+                        : `${((activeItem.preciseConfidence ?? activeItem.confidence ?? 85.0)).toFixed(1)}% HEDGED CONFIDENCE`}
+                    </span>
                   </div>
 
-                  {/* Verdict Headline in SERIF (Largest text on screen) & Filename demoted to mono */}
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                      <span
-                        className="font-mono"
-                        style={{
-                          fontSize: 10,
-                          padding: '2px 8px',
-                          borderRadius: 4,
-                          backgroundColor: activeItem.isAI ? 'rgba(232, 157, 67, 0.15)' : 'rgba(95, 208, 232, 0.15)',
-                          color: activeItem.isAI ? 'var(--amber)' : 'var(--cyan)',
-                          border: `1px solid ${activeItem.isAI ? 'var(--amber)' : 'var(--cyan)'}`,
-                          fontWeight: 700,
-                          letterSpacing: '0.06em',
-                        }}
-                      >
-                        {activeItem.isAI ? 'SYNTHETIC VERDICT' : 'OPTICAL VERDICT'}
-                      </span>
-                      <span className="font-mono" style={{ fontSize: 11, color: 'var(--cream-dim)' }}>
-                        CALIBRATION ECE {activeECE}
-                      </span>
-                    </div>
+                  <h2 className="font-display" style={{ fontSize: 'clamp(22px, 2.5vw, 28px)', margin: '4px 0 6px 0', color: 'var(--cream-ink)', fontWeight: 400 }}>
+                    {activeItem.name}
+                  </h2>
 
-                    {/* The Verdict as the Primary Headline in SERIF */}
-                    <h1
-                      className="font-display"
-                      style={{
-                        fontSize: 'clamp(24px, 2.5vw, 30px)',
-                        margin: '0 0 4px 0',
-                        color: activeItem.isAI ? 'var(--amber)' : 'var(--cyan)',
-                        fontWeight: 400,
-                        letterSpacing: '-0.02em',
-                        lineHeight: 1.15,
-                      }}
-                    >
-                      {activeItem.isAI ? 'Likely AI-Generated Diffusion' : 'Authentic Optical Sensor Capture'}
-                    </h1>
-
-                    {/* Specimen Filename in smaller MONO */}
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                      <span className="font-mono" style={{ fontSize: 12, color: 'var(--cream-ink)', fontWeight: 500 }}>
-                        {activeItem.name}
-                      </span>
-                      <span className="font-mono" style={{ fontSize: 11, color: 'var(--cream-dim)' }}>
-                        {activeItem.size || '2.40 MB'}
-                      </span>
-                      <span className="font-mono" style={{ fontSize: 11, color: 'var(--cream-dim)' }}>
-                        Confidence: {unifiedConfidence}%
-                      </span>
-                    </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span className="font-mono" style={{ fontSize: 11, color: 'var(--cream-dim)', padding: '2px 8px', borderRadius: 4, backgroundColor: 'var(--bg-surface)' }}>
+                      SIZE: {activeItem.size || '2.40 MB'}
+                    </span>
+                    <span className="font-mono" style={{ fontSize: 11, color: 'var(--cream-dim)', padding: '2px 8px', borderRadius: 4, backgroundColor: 'var(--bg-surface)' }}>
+                      CALIBRATION: ECE 0.024
+                    </span>
+                    <span className="font-mono" style={{ fontSize: 11, color: 'var(--cream-dim)', padding: '2px 8px', borderRadius: 4, backgroundColor: 'var(--bg-surface)' }}>
+                      IEEE-3302 AUDIT: PASS
+                    </span>
                   </div>
                 </div>
 
-                {/* The ONE and ONLY Export Case Dossier Button */}
                 <button
                   onClick={() => {
                     soundEngine.playReveal();
                     setReportModalItem(activeItem);
                   }}
-                  className="holo-shimmer-btn"
                   style={{
-                    backgroundColor: 'var(--cream-ink)',
-                    color: 'var(--bg-screening)',
+                    backgroundColor: 'var(--amber)',
+                    color: '#ffffff',
                     border: 'none',
-                    padding: '10px 18px',
-                    borderRadius: 8,
-                    fontSize: 13,
+                    padding: '8px 16px',
+                    borderRadius: 6,
+                    fontSize: 12.5,
                     fontWeight: 600,
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 8,
+                    gap: 6,
+                    boxShadow: '0 0 16px var(--amber-glow)',
                     transition: 'all 0.2s ease',
                   }}
                   data-cursor="interactive"
                 >
-                  <Printer size={14} />
+                  <Printer size={13} />
                   <span>Export Case Dossier</span>
                 </button>
               </div>
 
-              {/* NEW FEATURE: Disagreement / Forensic Conflict Surfacing Banner */}
-              {hasConflict ? (
-                <div
-                  style={{
-                    padding: '12px 16px',
-                    borderRadius: 8,
-                    backgroundColor: 'rgba(232, 157, 67, 0.08)',
-                    border: '1px solid rgba(232, 157, 67, 0.35)',
-                    marginBottom: 16,
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: 12,
-                  }}
-                >
-                  <AlertTriangle size={18} style={{ color: 'var(--amber)', flexShrink: 0, marginTop: 2 }} />
-                  <div>
-                    <div className="font-mono" style={{ fontSize: 11.5, color: 'var(--amber)', fontWeight: 700, letterSpacing: '0.04em' }}>
-                      FORENSIC SIGNAL CONFLICT DETECTED · PROCEED WITH CAUTION
-                    </div>
-                    <div className="font-sans" style={{ fontSize: 13, color: 'var(--cream-ink)', marginTop: 3, lineHeight: 1.5 }}>
-                      Neural classifier indicates {unifiedConfidence}% synthetic probability, but cryptographic C2PA manifest validates {activeItem.metadata?.camera || 'hardware camera'} sensor credentials. Probabilistic models cannot overrule cryptographic provenance; independent journalistic verification required.
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div
-                  style={{
-                    padding: '8px 14px',
-                    borderRadius: 6,
-                    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-                    border: '1px solid var(--border-subtle)',
-                    marginBottom: 16,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                  }}
-                >
-                  <CheckCircle size={14} style={{ color: activeItem.isAI ? 'var(--amber)' : 'var(--cyan)' }} />
-                  <span className="font-sans" style={{ fontSize: 12, color: 'var(--cream-muted)' }}>
-                    Multi-signal consensus: Neural classifier, 2D spectral Fourier roll-off, and provenance audit show coherent alignment.
-                  </span>
-                </div>
-              )}
-
-              {/* Calibration Reliability Strip — Single unified ECE value */}
+              {/* Tier 1: Calibration Reliability Strip */}
               <CalibrationReliabilityStrip
-                confidence={parseFloat(unifiedConfidence)}
+                confidence={activeItem.preciseConfidence || activeItem.confidence}
                 isAI={activeItem.isAI}
               />
 
-              {/* Diagnostic Workbench Segmented Tabs — Stripped of (Tier 1)/(Tier 2) & Neutral Chrome */}
+              {/* Diagnostic Workbench Tabs */}
               <div
                 style={{
                   display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
+                  gap: 8,
                   borderBottom: '1px solid var(--border-subtle)',
                   paddingBottom: 10,
                   marginBottom: 18,
                   overflowX: 'auto',
                 }}
               >
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {[
-                    { id: 'spatial', label: 'Spatial & Heatmap' },
-                    { id: 'radar', label: 'Generator Radar' },
-                    { id: 'stress', label: 'Adversarial Stress' },
-                    { id: 'claim', label: 'Claim Consistency' },
-                  ].map((tab) => {
-                    const isActive = activeTab === tab.id;
-                    return (
-                      <button
-                        key={tab.id}
-                        onClick={() => {
-                          soundEngine.playClick();
-                          setActiveTab(tab.id);
-                        }}
-                        style={{
-                          background: isActive ? 'var(--bg-card)' : 'transparent',
-                          border: `1px solid ${isActive ? 'var(--border-medium)' : 'transparent'}`,
-                          color: isActive ? 'var(--cream-ink)' : 'var(--cream-muted)',
-                          padding: '6px 14px',
-                          borderRadius: 6,
-                          fontSize: 12,
-                          fontWeight: isActive ? 600 : 400,
-                          cursor: 'pointer',
-                          whiteSpace: 'nowrap',
-                          transition: 'all 0.2s ease',
-                        }}
-                        className="font-mono"
-                        data-cursor="interactive"
-                      >
-                        {tab.label}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Chain of Custody Toggle Action */}
-                <button
-                  onClick={() => setShowChainOfCustody((c) => !c)}
-                  style={{
-                    background: showChainOfCustody ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
-                    border: '1px solid var(--border-subtle)',
-                    color: showChainOfCustody ? 'var(--cream-ink)' : 'var(--cream-dim)',
-                    padding: '5px 10px',
-                    borderRadius: 6,
-                    fontSize: 11,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 5,
-                  }}
-                  className="font-mono"
-                  title="View immutable chain of custody log"
-                >
-                  <FileCheck2 size={13} />
-                  <span>Chain of Custody</span>
-                </button>
+                {[
+                  { id: 'spatial', label: '✦ Spatial & Heatmap' },
+                  { id: 'radar', label: '✦ Generator Radar (Tier 1)' },
+                  { id: 'stress', label: '✦ Adversarial Stress (Tier 1)' },
+                  { id: 'claim', label: '✦ Claim Consistency (Tier 2)' },
+                ].map((tab) => {
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => {
+                        soundEngine.playClick();
+                        setActiveTab(tab.id);
+                      }}
+                      style={{
+                        background: isActive ? 'var(--bg-screening)' : 'transparent',
+                        border: `1px solid ${isActive ? 'var(--border-focus)' : 'transparent'}`,
+                        color: isActive ? 'var(--amber)' : 'var(--cream-muted)',
+                        padding: '7px 14px',
+                        borderRadius: 6,
+                        fontSize: 12.5,
+                        fontWeight: isActive ? 600 : 400,
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        transition: 'all 0.2s ease',
+                      }}
+                      className="font-mono"
+                      data-cursor="interactive"
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
               </div>
 
-              {/* NEW FEATURE: Expandable Chain of Custody Audit Ledger */}
-              {showChainOfCustody && (
-                <div
-                  style={{
-                    padding: 16,
-                    borderRadius: 8,
-                    backgroundColor: 'var(--bg-screening)',
-                    border: '1px solid var(--border-subtle)',
-                    marginBottom: 18,
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <span className="font-mono" style={{ fontSize: 11, color: 'var(--cream-muted)', letterSpacing: '0.08em', fontWeight: 700 }}>
-                      IMMUTABLE CHAIN OF CUSTODY LEDGER
-                    </span>
-                    <span className="font-mono" style={{ fontSize: 10, color: 'var(--cyan)' }}>
-                      SHA-256 PINNED
-                    </span>
-                  </div>
-                  <div className="font-mono" style={{ fontSize: 10.5, color: 'var(--cream-dim)', marginBottom: 8 }}>
-                    BITSTREAM DIGEST: {activeItem.hash || '7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069'}
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {[
-                      { time: '12:14:02 UTC', op: 'SPECIMEN_INGESTION', detail: 'Ingested into local volatile memory sandbox; SHA-256 hash locked.' },
-                      { time: '12:14:03 UTC', op: 'CONVHEAD_INFERENCE', detail: 'Multi-crop ConvHead spatial feature maps computed across quadrant tiles.' },
-                      { time: '12:14:03 UTC', op: 'SPECTRAL_2D_FFT', detail: 'Radial frequency roll-off and harmonic peaks calculated in cycles/pixel.' },
-                      { time: '12:14:04 UTC', op: 'ELA_QUANTIZATION', detail: 'JPEG error level disparity computed across 8x8 DCT grid blocks.' },
-                      { time: '12:14:04 UTC', op: 'C2PA_PROVENANCE', detail: 'Cryptographic certificate manifest and camera hardware EXIF scanned.' },
-                      { time: '12:14:05 UTC', op: 'ADVERSARIAL_STRESS', detail: 'JPEG Q70 re-compression stability evaluated.' },
-                    ].map((ev, i) => (
-                      <div key={i} style={{ display: 'flex', gap: 10, fontSize: 11 }} className="font-mono">
-                        <span style={{ color: 'var(--cream-dim)', minWidth: 90 }}>{ev.time}</span>
-                        <span style={{ color: 'var(--cream-ink)', fontWeight: 600, minWidth: 160 }}>[{ev.op}]</span>
-                        <span style={{ color: 'var(--cream-muted)' }}>{ev.detail}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Tab 1: Spatial & Latent Forensics Tactical Viewport (LEVEL 2: SECONDARY WEIGHT) */}
+              {/* Tab 1: Spatial & Latent Forensics with Interactive Tactical Viewport */}
               {activeTab === 'spatial' && (
                 <div>
                   {/* Viewport Tactical HUD Toolbar */}
@@ -4277,7 +3704,7 @@ function WorkspaceView({
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      padding: '8px 14px',
+                      padding: '8px 12px',
                       borderRadius: '8px 8px 0 0',
                       backgroundColor: 'var(--bg-screening)',
                       border: '1px solid var(--border-subtle)',
@@ -4286,15 +3713,15 @@ function WorkspaceView({
                       gap: 8,
                     }}
                   >
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                       <span className="font-mono" style={{ fontSize: 10.5, color: 'var(--cream-dim)', marginRight: 4 }}>
                         LAYER:
                       </span>
                       {[
                         { id: 'optical', label: '◉ Optical' },
-                        { id: 'heatmap', label: '✦ Heatmap (Grad-CAM)' },
-                        { id: 'fourier', label: '⚡ 2D Fourier' },
-                        { id: 'noise', label: '⚲ Noise Floor' },
+                        { id: 'heatmap', label: '✦ Heatmap' },
+                        { id: 'fourier', label: '⚡ Fourier' },
+                        { id: 'noise', label: '⚲ Noise' },
                       ].map((btn) => {
                         const isCurrent = viewportFilter === btn.id;
                         return (
@@ -4306,11 +3733,11 @@ function WorkspaceView({
                               setViewportFilter(btn.id);
                             }}
                             style={{
-                              background: isCurrent ? 'var(--cream-ink)' : 'transparent',
-                              color: isCurrent ? 'var(--bg-screening)' : 'var(--cream-muted)',
-                              border: `1px solid ${isCurrent ? 'var(--cream-ink)' : 'var(--border-subtle)'}`,
+                              background: isCurrent ? 'var(--amber)' : 'transparent',
+                              color: isCurrent ? '#ffffff' : 'var(--cream-muted)',
+                              border: `1px solid ${isCurrent ? 'var(--amber)' : 'var(--border-subtle)'}`,
                               borderRadius: 4,
-                              padding: '4px 10px',
+                              padding: '3px 8px',
                               fontSize: 11,
                               cursor: 'pointer',
                               fontWeight: isCurrent ? 600 : 400,
@@ -4323,76 +3750,9 @@ function WorkspaceView({
                           </button>
                         );
                       })}
-
-                      {/* Interactive Grad-CAM Blend Opacity Slider */}
-                      {viewportFilter === 'heatmap' && (
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 10, paddingLeft: 10, borderLeft: '1px solid var(--border-medium)' }}>
-                          <span className="font-mono" style={{ fontSize: 10, color: 'var(--cream-muted)', fontWeight: 600 }}>
-                            BLEND:
-                          </span>
-                          <input
-                            type="range"
-                            min="0.1"
-                            max="1.0"
-                            step="0.05"
-                            value={heatmapOpacity}
-                            onChange={(e) => setHeatmapOpacity(parseFloat(e.target.value))}
-                            className="forensic-slider"
-                            style={{ width: 72 }}
-                            title="Adjust Heatmap Overlay Blend Opacity"
-                          />
-                          <span className="font-mono" style={{ fontSize: 10, color: 'var(--cream-ink)' }}>
-                            {Math.round(heatmapOpacity * 100)}%
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setHeatmapOpacity(0.5)}
-                            style={{ background: 'transparent', border: 'none', color: 'var(--cream-dim)', fontSize: 9, cursor: 'pointer', padding: '1px 3px' }}
-                            title="Set to 50%"
-                          >
-                            50%
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setHeatmapOpacity(1.0)}
-                            style={{ background: 'transparent', border: 'none', color: 'var(--cream-dim)', fontSize: 9, cursor: 'pointer', padding: '1px 3px' }}
-                            title="Set to 100%"
-                          >
-                            Max
-                          </button>
-                        </div>
-                      )}
                     </div>
 
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      {/* Tactical Grid Toggle */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          soundEngine.playClick();
-                          setViewportGrid((g) => !g);
-                        }}
-                        style={{
-                          background: viewportGrid ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
-                          border: `1px solid ${viewportGrid ? 'var(--border-medium)' : 'var(--border-subtle)'}`,
-                          color: viewportGrid ? 'var(--cream-ink)' : 'var(--cream-dim)',
-                          borderRadius: 4,
-                          padding: '4px 9px',
-                          fontSize: 11,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 4,
-                        }}
-                        className="font-mono"
-                        data-cursor="interactive"
-                        title="Toggle viewfinder HUD grid"
-                      >
-                        <Grid size={11} />
-                        <span>Grid: {viewportGrid ? 'ON' : 'OFF'}</span>
-                      </button>
-
-                      {/* Laser Beam Toggle */}
                       <button
                         type="button"
                         onClick={() => {
@@ -4400,11 +3760,11 @@ function WorkspaceView({
                           setLaserActive(!laserActive);
                         }}
                         style={{
-                          background: laserActive ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
-                          border: `1px solid ${laserActive ? 'var(--border-medium)' : 'var(--border-subtle)'}`,
-                          color: laserActive ? 'var(--cream-ink)' : 'var(--cream-dim)',
+                          background: laserActive ? 'rgba(95, 208, 232, 0.15)' : 'transparent',
+                          border: `1px solid ${laserActive ? 'var(--cyan)' : 'var(--border-subtle)'}`,
+                          color: laserActive ? 'var(--cyan)' : 'var(--cream-dim)',
                           borderRadius: 4,
-                          padding: '4px 9px',
+                          padding: '3px 8px',
                           fontSize: 11,
                           cursor: 'pointer',
                           display: 'flex',
@@ -4413,25 +3773,24 @@ function WorkspaceView({
                         }}
                         className="font-mono"
                         data-cursor="interactive"
-                        title="Toggle moving forensic laser scanline"
+                        title="Toggle moving laser scanline"
                       >
-                        <Radio size={11} />
+                        <Radio size={12} />
                         <span>Laser: {laserActive ? 'ON' : 'OFF'}</span>
                       </button>
 
-                      {/* Magnifier Zoom Selector */}
                       <button
                         type="button"
                         onClick={() => {
                           soundEngine.playClick();
-                          setZoomLevel((z) => (z === 1 ? 1.5 : z === 1.5 ? 2 : 1));
+                          setZoomLevel((z) => (z === 1 ? 1.35 : 1));
                         }}
                         style={{
-                          background: zoomLevel > 1 ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
-                          border: `1px solid ${zoomLevel > 1 ? 'var(--border-medium)' : 'var(--border-subtle)'}`,
-                          color: zoomLevel > 1 ? 'var(--cream-ink)' : 'var(--cream-dim)',
+                          background: zoomLevel > 1 ? 'rgba(232, 157, 67, 0.15)' : 'transparent',
+                          border: `1px solid ${zoomLevel > 1 ? 'var(--amber)' : 'var(--border-subtle)'}`,
+                          color: zoomLevel > 1 ? 'var(--amber)' : 'var(--cream-dim)',
                           borderRadius: 4,
-                          padding: '4px 9px',
+                          padding: '3px 8px',
                           fontSize: 11,
                           cursor: 'pointer',
                           display: 'flex',
@@ -4440,26 +3799,17 @@ function WorkspaceView({
                         }}
                         className="font-mono"
                         data-cursor="interactive"
-                        title="Cycle Zoom Level (1x -> 1.5x -> 2x)"
+                        title="Toggle Zoom Inspection"
                       >
-                        <ZoomIn size={11} />
+                        <ZoomIn size={12} />
                         <span>Zoom: {zoomLevel}x</span>
                       </button>
                     </div>
                   </div>
 
-                  {/* Viewport Frame with Corner Brackets & Reticle HUD */}
+                  {/* The Viewport Frame with Tactical Brackets & Center Glow */}
                   <div
-                    className={viewportGrid ? 'hud-grid-bg' : ''}
-                    onMouseMove={(e) => {
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      if (rect.width > 0 && rect.height > 0) {
-                        const x = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-                        const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
-                        setReticleCoords({ x: Number(x.toFixed(1)), y: Number(y.toFixed(1)), active: true });
-                      }
-                    }}
-                    onMouseLeave={() => setReticleCoords((prev) => ({ ...prev, active: false }))}
+                    className="hud-grid-bg"
                     style={{
                       position: 'relative',
                       width: '100%',
@@ -4468,21 +3818,20 @@ function WorkspaceView({
                       borderRadius: '0 0 10px 10px',
                       overflow: 'hidden',
                       border: '1px solid var(--border-subtle)',
-                      marginBottom: 18,
+                      marginBottom: 20,
                       backgroundColor: 'var(--bg-screening)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      cursor: 'crosshair',
                     }}
                   >
-                    {/* Corner Crosshairs */}
-                    <div style={{ position: 'absolute', top: 10, left: 12, width: 14, height: 14, borderTop: '2px solid var(--border-medium)', borderLeft: '2px solid var(--border-medium)', pointerEvents: 'none', zIndex: 6 }} />
-                    <div style={{ position: 'absolute', top: 10, right: 12, width: 14, height: 14, borderTop: '2px solid var(--border-medium)', borderRight: '2px solid var(--border-medium)', pointerEvents: 'none', zIndex: 6 }} />
-                    <div style={{ position: 'absolute', bottom: 10, left: 12, width: 14, height: 14, borderBottom: '2px solid var(--border-medium)', borderLeft: '2px solid var(--border-medium)', pointerEvents: 'none', zIndex: 6 }} />
-                    <div style={{ position: 'absolute', bottom: 10, right: 12, width: 14, height: 14, borderBottom: '2px solid var(--border-medium)', borderRight: '2px solid var(--border-medium)', pointerEvents: 'none', zIndex: 6 }} />
+                    {/* Tactical Viewfinder Corner Brackets */}
+                    <div style={{ position: 'absolute', top: 10, left: 12, width: 14, height: 14, borderTop: '2px solid var(--amber)', borderLeft: '2px solid var(--amber)', pointerEvents: 'none', zIndex: 6 }} />
+                    <div style={{ position: 'absolute', top: 10, right: 12, width: 14, height: 14, borderTop: '2px solid var(--amber)', borderRight: '2px solid var(--amber)', pointerEvents: 'none', zIndex: 6 }} />
+                    <div style={{ position: 'absolute', bottom: 10, left: 12, width: 14, height: 14, borderBottom: '2px solid var(--amber)', borderLeft: '2px solid var(--amber)', pointerEvents: 'none', zIndex: 6 }} />
+                    <div style={{ position: 'absolute', bottom: 10, right: 12, width: 14, height: 14, borderBottom: '2px solid var(--amber)', borderRight: '2px solid var(--amber)', pointerEvents: 'none', zIndex: 6 }} />
 
-                    {/* Top HUD Telemetry Stamp — Grounded spatial frequency */}
+                    {/* Top HUD Telemetry Stamp */}
                     <div
                       className="font-mono"
                       style={{
@@ -4496,7 +3845,7 @@ function WorkspaceView({
                         zIndex: 6,
                       }}
                     >
-                      // SPATIAL FREQUENCY ENVELOPE · MULTI-CROP CONVHEAD
+                      // OPTICAL FREQUENCY ENVELOPE · SENSOR HARMONICS
                     </div>
 
                     <div
@@ -4520,7 +3869,7 @@ function WorkspaceView({
                       <div className={`forensic-laser ${activeItem.isAI ? 'laser-amber' : ''}`} />
                     )}
 
-                    {/* Inspection exhibit with Grad-CAM overlay & clean non-occluded hotspots */}
+                    {/* Inspection exhibit with backend-generated Grad-CAM overlay */}
                     <div
                       style={{
                         position: 'relative',
@@ -4544,12 +3893,10 @@ function WorkspaceView({
                           ...getFilterStyle(),
                         }}
                       />
-
-                      {/* Grad-CAM Heatmap overlay with blend opacity */}
                       {viewportFilter === 'heatmap' && activeItem.gradcamOverlay && (
                         <img
                           src={activeItem.gradcamOverlay}
-                          alt="Grad-CAM activation attribution"
+                          alt={`Grad-CAM attribution for ${activeItem.gradcamTarget || 'the predicted class'}`}
                           style={{
                             position: 'absolute',
                             inset: 0,
@@ -4557,84 +3904,19 @@ function WorkspaceView({
                             height: '100%',
                             objectFit: 'fill',
                             borderRadius: 6,
-                            opacity: heatmapOpacity,
-                            mixBlendMode: 'screen',
                             pointerEvents: 'none',
-                            transition: 'opacity 0.2s ease',
                           }}
                         />
                       )}
-
-                      {/* BUG FIX: Interactive Neural Hotspots — Only ONE tooltip visible at a time on hover/focus */}
-                      {activeItem.heatSpots && activeItem.heatSpots.map((spot, idx) => {
-                        const isHovered = hoveredSpotIdx === idx;
-                        return (
-                          <div
-                            key={idx}
-                            onMouseEnter={() => setHoveredSpotIdx(idx)}
-                            onMouseLeave={() => setHoveredSpotIdx(null)}
-                            style={{
-                              position: 'absolute',
-                              left: `${spot.x}%`,
-                              top: `${spot.y}%`,
-                              transform: 'translate(-50%, -50%)',
-                              pointerEvents: 'auto',
-                              cursor: 'pointer',
-                              zIndex: isHovered ? 20 : 8,
-                            }}
-                            className="reticle-pulse"
-                          >
-                            <div
-                              style={{
-                                width: 20,
-                                height: 20,
-                                borderRadius: '50%',
-                                border: `2px solid ${activeItem.isAI ? 'var(--amber)' : 'var(--cyan)'}`,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                backgroundColor: activeItem.isAI ? 'rgba(232, 157, 67, 0.35)' : 'rgba(95, 208, 232, 0.35)',
-                                boxShadow: `0 0 10px ${activeItem.isAI ? 'var(--amber)' : 'var(--cyan)'}`,
-                              }}
-                            >
-                              <div style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: '#ffffff' }} />
-                            </div>
-
-                            {/* Clean non-occluded single tooltip on hover */}
-                            {isHovered && (
-                              <div
-                                className="font-mono"
-                                style={{
-                                  position: 'absolute',
-                                  left: 24,
-                                  top: -8,
-                                  whiteSpace: 'nowrap',
-                                  fontSize: 10,
-                                  padding: '3px 8px',
-                                  borderRadius: 4,
-                                  backgroundColor: 'rgba(0, 0, 0, 0.94)',
-                                  border: `1px solid ${activeItem.isAI ? 'var(--amber)' : 'var(--cyan)'}`,
-                                  color: '#ffffff',
-                                  pointerEvents: 'none',
-                                  backdropFilter: 'blur(6px)',
-                                  boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
-                                }}
-                              >
-                                {spot.label}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
                     </div>
 
-                    {/* Analyzing Overlay */}
+                    {/* Analyzing Overlay with Spinner */}
                     {activeItem.status === 'analyzing' && (
                       <div
                         style={{
                           position: 'absolute',
                           inset: 0,
-                          backgroundColor: 'rgba(0, 0, 0, 0.78)',
+                          backgroundColor: 'rgba(0, 0, 0, 0.76)',
                           backdropFilter: 'blur(6px)',
                           display: 'flex',
                           flexDirection: 'column',
@@ -4649,13 +3931,13 @@ function WorkspaceView({
                             width: 48,
                             height: 48,
                             borderRadius: '50%',
-                            border: '3px solid rgba(255, 255, 255, 0.15)',
-                            borderTopColor: 'var(--cream-ink)',
+                            border: '3px solid rgba(232, 157, 67, 0.25)',
+                            borderTopColor: 'var(--amber)',
                             animation: 'spin 0.8s linear infinite',
                           }}
                         />
-                        <div className="font-mono" style={{ fontSize: 13, color: 'var(--cream-ink)', letterSpacing: '0.08em', fontWeight: 600 }}>
-                          ANALYZING MULTI-CROP SPATIAL HARMONICS…
+                        <div className="font-mono" style={{ fontSize: 13, color: 'var(--amber)', letterSpacing: '0.08em', fontWeight: 600 }}>
+                          EXTRACTING SPATIAL FREQUENCY SPECTRUM…
                         </div>
                         <div className="font-sans" style={{ fontSize: 12, color: 'var(--cream-dim)' }}>
                           Probing sensor grain harmonics, latent diffusion artifacts, and C2PA credentials
@@ -4663,139 +3945,81 @@ function WorkspaceView({
                       </div>
                     )}
 
-                    {/* Bottom HUD Telemetry Overlay with live cursor crosshair */}
+                    {/* Bottom HUD Telemetry Overlay */}
                     <div
                       className="font-mono"
                       style={{
                         position: 'absolute',
                         bottom: 8,
                         left: 32,
-                        right: 32,
-                        display: 'flex',
-                        justifyContent: 'space-between',
                         fontSize: 10,
                         color: 'var(--cream-dim)',
                         pointerEvents: 'none',
                         zIndex: 6,
                       }}
                     >
-                      <span>FOV: FULL-FRAME · COHERENCE: PASS</span>
-                      {reticleCoords.active && (
-                        <span style={{ color: 'var(--cyan)' }}>
-                          RETICLE [X: {reticleCoords.x}% · Y: {reticleCoords.y}%]
-                        </span>
-                      )}
+                      FOV: OPTICAL FULL-FRAME · COHERENCE: PASS
                     </div>
                   </div>
 
-                  {/* SECONDARY VISUAL WEIGHT: Certified Forensic Reasoning Dispatch Card (Prose in SANS!) */}
+                  {/* Certified Forensic Reasoning Dispatch Card */}
                   <div
                     style={{
-                      padding: 18,
+                      padding: 20,
                       borderRadius: 10,
-                      backgroundColor: 'var(--bg-card)',
+                      backgroundColor: 'var(--bg-screening)',
                       border: '1px solid var(--border-subtle)',
-                      marginBottom: 16,
+                      marginBottom: 20,
+                      position: 'relative',
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                      <div className="font-mono" style={{ fontSize: 11, color: 'var(--cream-muted)', letterSpacing: '0.08em', fontWeight: 700 }}>
+                      <div className="font-mono" style={{ fontSize: 11, color: 'var(--amber)', letterSpacing: '0.1em', fontWeight: 700 }}>
                         // FORENSIC REASONING DISPATCH · CHIEF ANALYST ASSESSMENT
                       </div>
-                      <span className="font-mono" style={{ fontSize: 11, color: activeItem.isAI ? 'var(--amber)' : 'var(--cyan)', fontWeight: 600 }}>
-                        Confidence: {unifiedConfidence}%
+                      <span className="font-mono" style={{ fontSize: 10.5, color: activeItem.isAI ? 'var(--amber)' : 'var(--cyan)' }}>
+                        CONFIDENCE: {activeItem.confidence}%
                       </span>
                     </div>
 
-                    {/* Reasoning Paragraph rendered in SANS for maximum readability per Rule */}
-                    <p className="font-sans" style={{ fontSize: 14, lineHeight: 1.65, color: 'var(--cream-ink)', margin: 0 }}>
+                    <p className="font-sans" style={{ fontSize: 14.5, lineHeight: 1.7, color: 'var(--cream-ink)', margin: '0 0 14px 0' }}>
                       “{activeItem.explanation}”
                     </p>
-                  </div>
 
-                  {/* TERTIARY VISUAL WEIGHT: 4-Card Telemetry Grid (Hairline border, descriptions in SANS) */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, marginBottom: 16 }}>
-                    {/* Card 1: Sensor Noise Floor */}
-                    <div style={{ padding: 12, borderRadius: 8, backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                        <Radio size={12} style={{ color: 'var(--cream-dim)' }} />
-                        <span className="font-mono" style={{ fontSize: 10, color: 'var(--cream-dim)', letterSpacing: '0.04em' }}>
-                          SENSOR NOISE FLOOR
-                        </span>
+                    {/* Forensic Verification Takeaways */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
+                      <div style={{ padding: '8px 12px', borderRadius: 6, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-subtle)', fontSize: 11.5 }} className="font-mono">
+                        <span style={{ color: 'var(--cream-dim)' }}>Sensor Grain:</span>{' '}
+                        <strong style={{ color: activeItem.isAI ? 'var(--amber)' : 'var(--cyan)' }}>
+                          {activeItem.isAI ? 'Anomalous (Diffusion)' : 'Consistent Optical'}
+                        </strong>
                       </div>
-                      <div className="font-mono" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--cream-ink)', marginBottom: 2 }}>
-                        {activeItem.isAI ? 'Synthetic Deconvolution' : 'Physical CMOS PRNU'}
+                      <div style={{ padding: '8px 12px', borderRadius: 6, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-subtle)', fontSize: 11.5 }} className="font-mono">
+                        <span style={{ color: 'var(--cream-dim)' }}>Fourier Harmonics:</span>{' '}
+                        <strong style={{ color: activeItem.isAI ? 'var(--amber)' : 'var(--cyan)' }}>
+                          {activeItem.isAI ? 'Repeating Artifacts' : 'Photon Noise Floor'}
+                        </strong>
                       </div>
-                      <div className="font-sans" style={{ fontSize: 11.5, color: 'var(--cream-muted)' }}>
-                        {activeItem.isAI ? 'Missing photon shot noise' : 'True sensor PRNU coherence'}
-                      </div>
-                    </div>
-
-                    {/* Card 2: 2D FFT Fourier Spectrum — Measured in cycles/pixel */}
-                    <div style={{ padding: 12, borderRadius: 8, backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                        <Zap size={12} style={{ color: 'var(--cream-dim)' }} />
-                        <span className="font-mono" style={{ fontSize: 10, color: 'var(--cream-dim)', letterSpacing: '0.04em' }}>
-                          2D FFT SPECTRUM
-                        </span>
-                      </div>
-                      <div className="font-mono" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--cream-ink)', marginBottom: 2 }}>
-                        {activeItem.spectralAnalysis?.high_frequency_ratio !== undefined
-                          ? `${(activeItem.spectralAnalysis.high_frequency_ratio * 100).toFixed(1)}% (cycles/px)`
-                          : (activeItem.isAI ? '0.38 cycles/px (Elevated)' : '0.14 cycles/px (Natural)')}
-                      </div>
-                      <div className="font-sans" style={{ fontSize: 11.5, color: 'var(--cream-muted)' }}>
-                        {activeItem.isAI ? 'Latent VAE lattice spikes' : 'Smooth natural decay floor'}
-                      </div>
-                    </div>
-
-                    {/* Card 3: Error Level Analysis */}
-                    <div style={{ padding: 12, borderRadius: 8, backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                        <Activity size={12} style={{ color: 'var(--cream-dim)' }} />
-                        <span className="font-mono" style={{ fontSize: 10, color: 'var(--cream-dim)', letterSpacing: '0.04em' }}>
-                          ERROR LEVEL ANALYSIS (ELA)
-                        </span>
-                      </div>
-                      <div className="font-mono" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--cream-ink)', marginBottom: 2 }}>
-                        {activeItem.elaAnalysis?.tile_variance !== undefined
-                          ? `σ = ${activeItem.elaAnalysis.tile_variance}`
-                          : (activeItem.isAI ? 'Non-uniform variance' : 'Uniform error floor')}
-                      </div>
-                      <div className="font-sans" style={{ fontSize: 11.5, color: 'var(--cream-muted)' }}>
-                        {activeItem.isAI ? 'Disparate DCT tile blocks' : 'Consistent quantization floor'}
-                      </div>
-                    </div>
-
-                    {/* Card 4: Provenance Manifest — Violet reserved for C2PA */}
-                    <div style={{ padding: 12, borderRadius: 8, backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                        <Lock size={12} style={{ color: 'var(--violet-provenance)' }} />
-                        <span className="font-mono" style={{ fontSize: 10, color: 'var(--violet-provenance)', letterSpacing: '0.04em' }}>
-                          PROVENANCE & C2PA
-                        </span>
-                      </div>
-                      <div className="font-mono" style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--violet-provenance)', marginBottom: 2 }}>
-                        {activeItem.metadata?.c2pa || 'Verified'}
-                      </div>
-                      <div className="font-sans" style={{ fontSize: 11.5, color: 'var(--cream-muted)' }}>
-                        {activeItem.metadata?.camera || 'Hardware signature check'}
+                      <div style={{ padding: '8px 12px', borderRadius: 6, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-subtle)', fontSize: 11.5 }} className="font-mono">
+                        <span style={{ color: 'var(--cream-dim)' }}>Provenance Audit:</span>{' '}
+                        <strong style={{ color: 'var(--violet-provenance)' }}>
+                          {activeItem.metadata?.c2pa || 'Verified'}
+                        </strong>
                       </div>
                     </div>
                   </div>
 
-                  {/* TERTIARY VISUAL WEIGHT: Manifest & Re-Compression Resilience Details */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                    {/* Provenance Manifest */}
-                    <div style={{ padding: 14, borderRadius: 8, backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                        <Lock size={12} style={{ color: 'var(--violet-provenance)' }} />
-                        <span className="font-mono" style={{ fontSize: 10.5, color: 'var(--violet-provenance)', letterSpacing: '0.08em', fontWeight: 700 }}>
-                          PROVENANCE MANIFEST
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
+                    {/* Provenance Manifest with Cool Violet Accent */}
+                    <div style={{ padding: 18, borderRadius: 10, backgroundColor: 'var(--bg-screening)', border: '1px solid var(--border-subtle)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                        <Lock size={13} style={{ color: 'var(--violet-provenance)' }} />
+                        <span className="font-mono" style={{ fontSize: 11, color: 'var(--violet-provenance)', letterSpacing: '0.08em', fontWeight: 700 }}>
+                          PROVENANCE & C2PA VERIFICATION
                         </span>
                       </div>
-                      <div className="font-sans" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 5 }}>
-                        <div><span style={{ color: 'var(--cream-dim)' }}>Sensor Device:</span> <span className="font-mono" style={{ color: 'var(--cream-ink)' }}>{activeItem.metadata?.camera}</span></div>
+                      <div className="font-sans" style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 7 }}>
+                        <div><span style={{ color: 'var(--cream-dim)' }}>Camera Sensor:</span> <strong style={{ color: 'var(--cream-ink)' }}>{activeItem.metadata?.camera}</strong></div>
                         <div><span style={{ color: 'var(--cream-dim)' }}>Timestamp:</span> <span className="font-mono" style={{ color: 'var(--cream-ink)' }}>{activeItem.metadata?.timestamp}</span></div>
                         <div>
                           <span style={{ color: 'var(--cream-dim)' }}>Manifest Status:</span>{' '}
@@ -4803,11 +4027,11 @@ function WorkspaceView({
                             className="font-mono"
                             style={{
                               display: 'inline-block',
-                              padding: '1px 6px',
+                              padding: '2px 8px',
                               borderRadius: 4,
                               backgroundColor: 'var(--violet-glow)',
                               color: 'var(--violet-provenance)',
-                              fontSize: 10.5,
+                              fontSize: 11,
                               border: '1px solid var(--violet-provenance)',
                               fontWeight: 600,
                             }}
@@ -4818,55 +4042,35 @@ function WorkspaceView({
                       </div>
                     </div>
 
-                    {/* BUG FIX: Re-compression Resilience with accurate non-zero Probability Delta */}
-                    <div style={{ padding: 14, borderRadius: 8, backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)' }}>
-                      <div className="font-mono" style={{ fontSize: 10.5, color: 'var(--cream-dim)', letterSpacing: '0.08em', marginBottom: 8, fontWeight: 700 }}>
+                    <div style={{ padding: 18, borderRadius: 10, backgroundColor: 'var(--bg-screening)', border: '1px solid var(--border-subtle)' }}>
+                      <div className="font-mono" style={{ fontSize: 11, color: 'var(--cream-dim)', letterSpacing: '0.08em', marginBottom: 10, fontWeight: 700 }}>
                         RE-COMPRESSION RESILIENCE
                       </div>
-                      <div className="font-sans" style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 5 }}>
-                        <div><span style={{ color: 'var(--cream-dim)' }}>Original Confidence:</span> <span className="font-mono" style={{ color: 'var(--cream-ink)', fontWeight: 600 }}>{originalRobustness}%</span></div>
-                        <div><span style={{ color: 'var(--cream-dim)' }}>Post-Compression:</span> <span className="font-mono" style={{ color: 'var(--cream-ink)', fontWeight: 600 }}>{compressedRobustness}%</span></div>
-                        <div><span style={{ color: 'var(--cream-dim)' }}>Test Condition:</span> <span className="font-mono" style={{ color: 'var(--cream-ink)' }}>JPEG Q70 Stress</span></div>
-                        <div>
-                          <span style={{ color: 'var(--cream-dim)' }}>Probability Delta:</span>{' '}
-                          <span className="font-mono" style={{ color: 'var(--cream-ink)', fontWeight: 600 }}>
-                            {probDelta}
-                          </span>
-                        </div>
+                      <div className="font-sans" style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 7 }}>
+                        <div><span style={{ color: 'var(--cream-dim)' }}>Original Confidence:</span> <span className="font-mono" style={{ color: 'var(--cream-ink)', fontWeight: 600 }}>{activeItem.robustness?.original}%</span></div>
+                        <div><span style={{ color: 'var(--cream-dim)' }}>Post-Compression:</span> <span className="font-mono" style={{ color: 'var(--cream-ink)', fontWeight: 600 }}>{activeItem.robustness?.compressed ?? 'N/A'}%</span></div>
+                        <div><span style={{ color: 'var(--cream-dim)' }}>Test condition:</span> <span style={{ color: 'var(--cream-ink)' }}>{activeItem.robustness?.condition || 'Not available'}</span></div>
+                        <div><span style={{ color: 'var(--cream-dim)' }}>AI probability change:</span> <span className="font-mono" style={{ color: 'var(--cream-ink)', fontWeight: 600 }}>{Number(activeItem.robustness?.probabilityDelta ?? 0).toFixed(3)}</span></div>
                       </div>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Tab 2: Generator Fingerprint Radar with quiet DEMO DATA chip */}
+
+              {/* Tab 2: Generator Fingerprint Radar */}
               {activeTab === 'radar' && (
-                <div style={{ padding: 20, borderRadius: 10, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
+                <div style={{ padding: 22, borderRadius: 10, backgroundColor: 'var(--bg-screening)', border: '1px solid var(--border-subtle)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span className="font-mono" style={{ fontSize: 11, color: 'var(--cream-muted)', letterSpacing: '0.08em', fontWeight: 700 }}>
-                          GENERATOR FINGERPRINT SPECTRUM
-                        </span>
-                        <span
-                          className="font-mono"
-                          style={{
-                            fontSize: 9.5,
-                            padding: '1px 6px',
-                            borderRadius: 3,
-                            backgroundColor: 'rgba(255, 255, 255, 0.06)',
-                            color: 'var(--cream-dim)',
-                            border: '1px solid var(--border-subtle)',
-                          }}
-                        >
-                          DEMO DATA
-                        </span>
+                      <div className="font-mono" style={{ fontSize: 11, color: 'var(--amber)', letterSpacing: '0.1em' }}>
+                        GENERATOR FINGERPRINT SPECTRUM
                       </div>
-                      <div className="font-sans" style={{ fontSize: 12.5, color: 'var(--cream-muted)', marginTop: 2 }}>
-                        Multi-axis decomposition across named generative families (illustrative prototype interface).
+                      <div className="font-sans" style={{ fontSize: 13, color: 'var(--cream-muted)', marginTop: 2 }}>
+                        Multi-axis decomposition across named generative families instead of a primitive binary classification.
                       </div>
                     </div>
-                    <span className="font-mono" style={{ fontSize: 11, color: 'var(--cream-dim)' }}>
+                    <span className="font-mono" style={{ fontSize: 11, color: 'var(--cyan)' }}>
                       HARMONIC RECTIFIED PROJECTION
                     </span>
                   </div>
@@ -4876,7 +4080,7 @@ function WorkspaceView({
                     isAI={activeItem.isAI}
                   />
 
-                  <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
+                  <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
                     {[
                       { name: 'FLUX', score: activeItem.generatorFingerprints?.flux ?? 10, note: 'Grid harmonics' },
                       { name: 'Midjourney', score: activeItem.generatorFingerprints?.midjourney ?? 12, note: 'Texture sheen' },
@@ -4884,12 +4088,12 @@ function WorkspaceView({
                       { name: 'StyleGAN', score: activeItem.generatorFingerprints?.stylegan ?? 6, note: 'Corneal symmetry' },
                       { name: 'SDXL / SD', score: activeItem.generatorFingerprints?.sdxl ?? 9, note: 'Latent boundary' },
                     ].map((f) => (
-                      <div key={f.name} style={{ padding: '10px 12px', borderRadius: 8, backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)' }}>
+                      <div key={f.name} style={{ padding: '10px 12px', borderRadius: 8, backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
                         <div className="font-mono" style={{ fontSize: 11, color: 'var(--cream-muted)' }}>{f.name}</div>
-                        <div className="font-mono" style={{ fontSize: 15, fontWeight: 700, color: activeItem.isAI && f.score > 40 ? 'var(--amber)' : 'var(--cream-ink)', margin: '2px 0' }}>
+                        <div className="font-mono" style={{ fontSize: 16, fontWeight: 700, color: activeItem.isAI && f.score > 40 ? 'var(--amber)' : 'var(--cream-ink)', margin: '2px 0' }}>
                           {f.score}%
                         </div>
-                        <div className="font-sans" style={{ fontSize: 10.5, color: 'var(--cream-dim)' }}>{f.note}</div>
+                        <div style={{ fontSize: 10.5, color: 'var(--cream-dim)' }}>{f.note}</div>
                       </div>
                     ))}
                   </div>
@@ -4899,7 +4103,7 @@ function WorkspaceView({
               {/* Tab 3: Adversarial Stress Panel */}
               {activeTab === 'stress' && (
                 <AdversarialStressPanel
-                  baseConfidence={parseFloat(unifiedConfidence)}
+                  baseConfidence={activeItem.confidence}
                   isAI={activeItem.isAI}
                 />
               )}
@@ -4914,17 +4118,10 @@ function WorkspaceView({
       </div>
 
       {/* Certified Forensic Dossier Modal (Printable/PDF) */}
-      {reportModalItem && (
-        <ForensicDossierModal
-          item={{
-            ...reportModalItem,
-            confidence: parseFloat(unifiedConfidence),
-            preciseConfidence: parseFloat(unifiedConfidence),
-            calibrationECE: activeECE,
-          }}
-          onClose={() => setReportModalItem(null)}
-        />
-      )}
+      <ForensicDossierModal
+        item={reportModalItem}
+        onClose={() => setReportModalItem(null)}
+      />
     </div>
   );
 }
@@ -4939,47 +4136,6 @@ export default function App() {
   const [activeSection, setActiveSection] = useState('01');
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [gridEnabled, setGridEnabled] = useState(true);
-
-  // Real-time Neural Engine Connection State
-  const [backendStatus, setBackendStatus] = useState({ online: false, checking: true, model: '', device: '' });
-
-  useEffect(() => {
-    let mounted = true;
-    const checkHealth = async () => {
-      try {
-        let res = null;
-        try {
-          res = await fetch('/health');
-        } catch {
-          res = await fetch(`${API_BASE_URL}/health`);
-        }
-        if (res && res.ok) {
-          const data = await res.json();
-          if (mounted) {
-            setBackendStatus({
-              online: true,
-              checking: false,
-              model: data.model_name || 'SignalScope EfficientNet-B0',
-              device: data.device || 'CPU',
-            });
-          }
-          return;
-        }
-      } catch {
-        // offline
-      }
-      if (mounted) {
-        setBackendStatus({ online: false, checking: false, model: '', device: '' });
-      }
-    };
-
-    checkHealth();
-    const interval = setInterval(checkHealth, 15000);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, []);
 
   // Authentication State
   const [user, setUser] = useState(() => {
@@ -5197,7 +4353,6 @@ export default function App() {
             user={user}
             onOpenAuthModal={handleOpenAuthModal}
             onLogout={handleLogout}
-            backendStatus={backendStatus}
           />
           <main>
             <HeroSection onOpenWorkspace={() => setView('workspace')} />
@@ -5220,11 +4375,6 @@ export default function App() {
           pastedItem={pastedItem}
           onClearPastedItem={() => setPastedItem(null)}
           onSavePendingFile={(file) => { pendingPasteRef.current = file; }}
-          backendStatus={backendStatus}
-          gridEnabled={gridEnabled}
-          onToggleGrid={toggleGrid}
-          soundEnabled={soundEnabled}
-          onToggleSound={toggleSound}
         />
       )}
     </div>

@@ -91,23 +91,16 @@ body {
   font-family: var(--font-script);
 }
 
-/* 35mm Ambient Cyber Grid Overlay */
+/* 35mm Ambient Film Grid Overlay */
 .cinema-grid-overlay {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 10;
-  background-image: radial-gradient(circle at 1px 1px, rgba(244, 239, 230, 0.07) 1px, transparent 0);
-  background-size: 28px 28px;
-  mask-image: radial-gradient(ellipse at 50% 35%, black 45%, rgba(0,0,0,0.2) 80%, transparent 100%);
-  -webkit-mask-image: radial-gradient(ellipse at 50% 35%, black 45%, rgba(0,0,0,0.2) 80%, transparent 100%);
-  opacity: 0.7;
-  transition: opacity 0.3s ease;
-}
-
-.theme-light .cinema-grid-overlay {
-  background-image: radial-gradient(circle at 1px 1px, rgba(19, 16, 12, 0.06) 1px, transparent 0);
-  opacity: 0.5;
+  z-index: 90;
+  background-image: 
+    linear-gradient(to right, var(--border-subtle) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border-subtle) 1px, transparent 1px);
+  background-size: 64px 64px;
 }
 
 /* Ambient Slow Drifting Glow behind Hero */
@@ -270,16 +263,15 @@ body {
 /* Viewport Tactical Grid */
 .hud-grid-bg {
   background-image: 
-    linear-gradient(to right, rgba(95, 208, 232, 0.04) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(95, 208, 232, 0.04) 1px, transparent 1px);
+    linear-gradient(to right, rgba(244, 239, 230, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(244, 239, 230, 0.05) 1px, transparent 1px);
   background-size: 24px 24px;
-  position: relative;
 }
 
 .theme-light .hud-grid-bg {
   background-image: 
-    linear-gradient(to right, rgba(2, 132, 199, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(2, 132, 199, 0.05) 1px, transparent 1px);
+    linear-gradient(to right, rgba(19, 16, 12, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(19, 16, 12, 0.05) 1px, transparent 1px);
 }
 
 /* Glow Pill & Neon Utilities */
@@ -296,216 +288,6 @@ body {
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--border-medium);
-}
-
-/* Cyber Forensic Workstation Glass Panels & Cards */
-.forensic-glass-panel {
-  background: rgba(24, 20, 16, 0.72);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(244, 239, 230, 0.08);
-  box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.5);
-  border-radius: 14px;
-}
-
-.theme-light .forensic-glass-panel {
-  background: rgba(255, 255, 255, 0.88);
-  border: 1px solid rgba(19, 16, 12, 0.08);
-  box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.08);
-}
-
-.forensic-card-subtle {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.forensic-card-subtle:hover {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: var(--border-medium);
-  transform: translateY(-1px);
-}
-
-.theme-light .forensic-card-subtle {
-  background: rgba(0, 0, 0, 0.02);
-}
-
-.theme-light .forensic-card-subtle:hover {
-  background: rgba(0, 0, 0, 0.04);
-}
-
-/* Custom Tactical Range Slider */
-.forensic-slider {
-  -webkit-appearance: none;
-  appearance: none;
-  height: 4px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.15);
-  outline: none;
-  cursor: pointer;
-}
-
-.forensic-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--amber);
-  cursor: pointer;
-  box-shadow: 0 0 10px var(--amber);
-  transition: transform 0.15s ease;
-}
-
-.forensic-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.25);
-}
-
-/* Custom Scrollbar for Evidence Vault */
-.forensic-custom-scroll::-webkit-scrollbar {
-  width: 5px;
-}
-.forensic-custom-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-.forensic-custom-scroll::-webkit-scrollbar-thumb {
-  background: var(--border-medium);
-  border-radius: 4px;
-}
-.forensic-custom-scroll::-webkit-scrollbar-thumb:hover {
-  background: var(--amber);
-}
-
-/* ============================================================
-   ADVANCED CYBERNETIC FORENSIC ANIMATIONS & HUD STYLES
-   ============================================================ */
-
-/* Pulsing Radar Sonar Sweep */
-@keyframes radarSweep {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-.radar-sweep-arm {
-  transform-origin: center;
-  animation: radarSweep 4s linear infinite;
-}
-
-/* Holographic Shimmer Effect */
-@keyframes holoShimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
-.holo-shimmer-btn {
-  position: relative;
-  overflow: hidden;
-}
-
-.holo-shimmer-btn::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.22) 50%, transparent 100%);
-  background-size: 200% 100%;
-  animation: holoShimmer 3s infinite ease-in-out;
-  pointer-events: none;
-}
-
-/* Cyber Animated Border Glow */
-@keyframes cyberBorderRotate {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-.cyber-border-animated {
-  background: linear-gradient(90deg, rgba(232, 157, 67, 0.4), rgba(95, 208, 232, 0.5), rgba(168, 85, 247, 0.4), rgba(232, 157, 67, 0.4));
-  background-size: 300% 300%;
-  animation: cyberBorderRotate 8s ease infinite;
-}
-
-/* Reticle Target Pulse */
-@keyframes reticlePulse {
-  0% {
-    transform: scale(0.95);
-    opacity: 0.75;
-  }
-  50% {
-    transform: scale(1.08);
-    opacity: 1;
-    filter: drop-shadow(0 0 8px currentColor);
-  }
-  100% {
-    transform: scale(0.95);
-    opacity: 0.75;
-  }
-}
-
-.reticle-pulse {
-  animation: reticlePulse 2.4s ease-in-out infinite;
-}
-
-/* Interactive Floating Specimen Card */
-.specimen-card-interactive {
-  transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.specimen-card-interactive:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 28px -4px rgba(0, 0, 0, 0.45);
-}
-
-/* Ultra Glass Card */
-.hud-glass-card {
-  background: rgba(26, 21, 16, 0.75);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(244, 239, 230, 0.1);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
-}
-
-.theme-light .hud-glass-card {
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid rgba(19, 16, 12, 0.1);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.08);
-}
-
-/* Glowing Neon Badges */
-.badge-ai-glow {
-  background: linear-gradient(135deg, rgba(232, 157, 67, 0.15) 0%, rgba(232, 100, 67, 0.25) 100%);
-  border: 1px solid var(--amber);
-  color: var(--amber);
-  box-shadow: 0 0 20px -2px rgba(232, 157, 67, 0.35);
-}
-
-.badge-real-glow {
-  background: linear-gradient(135deg, rgba(95, 208, 232, 0.15) 0%, rgba(45, 170, 200, 0.25) 100%);
-  border: 1px solid var(--cyan);
-  color: var(--cyan);
-  box-shadow: 0 0 20px -2px rgba(95, 208, 232, 0.35);
-}
-
-.badge-review-glow {
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.15) 0%, rgba(138, 55, 220, 0.25) 100%);
-  border: 1px solid var(--violet-provenance);
-  color: var(--violet-provenance);
-  box-shadow: 0 0 20px -2px rgba(168, 85, 247, 0.35);
 }
 
 /* Print Styles for Forensic Dossier Export */
@@ -542,5 +324,4 @@ body {
   .ambient-hero-glow {
     animation: none;
   }
-}
-
+} 
