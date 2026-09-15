@@ -54,7 +54,7 @@ export function MagneticCursor() {
           return;
         }
         setCursorState('interactive');
-        setCursorLabel(val.toUpperCase());
+        setCursorLabel('');
         return;
       }
 
