@@ -2182,21 +2182,13 @@ async function analyzeWithSignalScope(file) {
   formData.append('image', file);
 
   let response = null;
-  // Try relative proxy endpoint first, fallback to direct localhost:8000
   try {
-    response = await fetch('/predict', {
+    response = await fetch(`${API_BASE_URL}/predict`, {
       method: 'POST',
       body: formData,
     });
-  } catch {
-    try {
-      response = await fetch(`${API_BASE_URL}/predict`, {
-        method: 'POST',
-        body: formData,
-      });
-    } catch (err) {
-      throw new Error('Could not connect to the SignalScope backend. Check that the deployed API is available.');
-    }
+  } catch (err) {
+    throw new Error('Could not connect to the SignalScope backend. Check that the deployed API is available.');
   }
 
   if (response && response.ok) {
