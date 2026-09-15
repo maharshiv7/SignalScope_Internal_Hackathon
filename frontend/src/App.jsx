@@ -45,6 +45,10 @@ import {
 import { soundEngine } from './sound';
 import { MagneticCursor } from './MagneticCursor';
 
+// Local development keeps using FastAPI on port 8000.  Vercel receives the
+// public Render URL through VITE_API_BASE_URL at build time.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+
 /* ============================================================
    THEME TOGGLE
    ============================================================ */
@@ -2184,12 +2188,12 @@ async function analyzeWithSignalScope(file) {
     });
   } catch {
     try {
-      response = await fetch('http://127.0.0.1:8000/predict', {
+      response = await fetch(`${API_BASE_URL}/predict`, {
         method: 'POST',
         body: formData,
       });
     } catch (err) {
-      throw new Error('Could not connect to SignalScope Neural Backend. Ensure the FastAPI server is running on http://127.0.0.1:8000.');
+      throw new Error('Could not connect to the SignalScope backend. Check that the deployed API is available.');
     }
   }
 
@@ -4724,7 +4728,7 @@ export default function App() {
         try {
           res = await fetch('/health');
         } catch {
-          res = await fetch('http://127.0.0.1:8000/health');
+          res = await fetch(`${API_BASE_URL}/health`);
         }
         if (res && res.ok) {
           const data = await res.json();
