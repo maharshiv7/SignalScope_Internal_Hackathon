@@ -15,7 +15,7 @@ from torchvision import transforms
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-MODEL_PATH = PROJECT_ROOT / "model" / "signalscope_best_v3_finetuned.pt"
+MODEL_PATH = PROJECT_ROOT / "models" / "signalscope_best_v3_finetuned.pt"
 FRONTEND_PATH = Path(__file__).with_name("index.html")
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
